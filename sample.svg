@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
+  <rect width="720" height="420" fill="#fff"/>
+  <line x1="40" y1="210" x2="680" y2="210" stroke="#ddd" stroke-width="2"/>
+  <line x1="360" y1="40" x2="360" y2="380" stroke="#ddd" stroke-width="2"/>
+
+  <g id="card-left">
+    <rect x="90" y="110" width="180" height="110" rx="14" fill="#e8f1ff" stroke="#4b77be" stroke-width="2"/>
+    <text x="180" y="170" text-anchor="middle" font-family="Arial" font-size="20" fill="#1d3557">Drag me</text>
+  </g>
+
+  <g id="card-right">
+    <rect x="445" y="115" width="170" height="105" rx="14" fill="#fff1e6" stroke="#e07a5f" stroke-width="2"/>
+    <text x="530" y="170" text-anchor="middle" font-family="Arial" font-size="20" fill="#6d2e1f">Resize me</text>
+  </g>
+
+  <circle id="dot-a" cx="305" cy="285" r="28" fill="#d8f3dc" stroke="#2d6a4f" stroke-width="2"/>
+  <circle id="dot-b" cx="385" cy="285" r="28" fill="#fce4ec" stroke="#ad1457" stroke-width="2"/>
+  <text x="345" y="350" text-anchor="middle" font-family="Arial" font-size="18" fill="#333">Shift-click both circles, then drag them together</text>
+</svg>

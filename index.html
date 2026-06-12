@@ -1,0 +1,1726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SVG Nudger v3</title>
+  <style>
+    :root {
+      --sidebar-width: 320px;
+      --border: #d8d8d8;
+      --bg: #f6f6f6;
+      --panel: #ffffff;
+      --text: #222;
+      --muted: #666;
+      --accent: #e53935;
+      --accent-soft: rgba(229, 57, 53, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    aside {
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      padding: 14px;
+      overflow: auto;
+    }
+
+    main {
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        linear-gradient(45deg, #eee 25%, transparent 25%),
+        linear-gradient(-45deg, #eee 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #eee 75%),
+        linear-gradient(-45deg, transparent 75%, #eee 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin: 0 0 10px;
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 18px 0 8px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin: 10px 0 4px;
+      color: var(--muted);
+    }
+
+    input, select, button, textarea {
+      width: 100%;
+      font: inherit;
+    }
+
+    input, select, textarea {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      background: #fff;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin: 4px 0;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    button:hover { background: #f0f0f0; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    textarea {
+      min-height: 130px;
+      resize: none;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .hint, .status, .info {
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .status {
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 6px;
+      background: #f4f4f4;
+      color: #333;
+    }
+
+    #svgHost {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 300px;
+      min-height: 300px;
+    }
+
+    #svgHost svg {
+      max-width: calc(100vw - var(--sidebar-width) - 60px);
+      max-height: calc(100vh - 60px);
+      background: white;
+      border: 1px solid #bbb;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+      user-select: none;
+      touch-action: none;
+    }
+
+    .empty {
+      padding: 40px;
+      border: 1px dashed #aaa;
+      background: rgba(255, 255, 255, 0.82);
+      color: #555;
+      text-align: center;
+      border-radius: 10px;
+    }
+
+    [data-nudger-selected-ui="true"] {
+      outline: 2px dashed var(--accent);
+      outline-offset: 2px;
+      cursor: move;
+    }
+
+    .tiny-list {
+      margin: 6px 0 0;
+      padding-left: 16px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .text-controls {
+      display: none;
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: min(320px, calc(100vw - var(--sidebar-width) - 40px));
+      max-height: calc(100vh - 40px);
+      overflow: auto;
+      margin-top: 0;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(250, 250, 250, 0.98);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+      z-index: 20;
+    }
+
+    .text-controls.is-visible {
+      display: block;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: #fff;
+      color: #444;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .info-icon:hover {
+      background: #f0f0f0;
+    }
+
+    .info-icon:focus-visible {
+      outline: 2px solid #000;
+      outline-offset: 2px;
+    }
+
+    .mode-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 6px 0 4px;
+    }
+
+    .mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 112px;
+      padding: 6px 10px;
+      border: 1px solid #cfcfcf;
+      border-radius: 999px;
+      background: #f5f5f5;
+      color: #555;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .mode-toggle:hover {
+      background: #ededed;
+    }
+
+    .mode-toggle.is-code {
+      border-color: #a66d00;
+      background: #fff4d6;
+      color: #7a4a00;
+    }
+
+    .mode-toggle.is-canvas {
+      border-color: #2e6f43;
+      background: #e8f6ed;
+      color: #1f5c35;
+    }
+
+    .mode-toggle:focus-visible {
+      outline: 2px solid #000;
+      outline-offset: 2px;
+    }
+
+    .help-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 1000;
+    }
+
+    .help-modal.is-open {
+      display: flex;
+    }
+
+    .help-dialog {
+      width: min(520px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+      padding: 16px;
+    }
+
+    .help-dialog h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .help-dialog pre {
+      margin: 0;
+      white-space: pre-wrap;
+      font: inherit;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    .help-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 14px;
+    }
+
+    .help-close {
+      width: auto;
+      min-width: 84px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .panel-close {
+      width: auto;
+      min-width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 999px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+
+    .mini-icon {
+      width: 24px;
+      min-width: 24px;
+      height: 24px;
+      padding: 0;
+      border-radius: 999px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+
+    .code-panel {
+      display: none;
+      position: fixed;
+      top: 24px;
+      left: 24px;
+      width: min(760px, calc(100vw - 48px));
+      height: min(320px, calc(100vh - 48px));
+      min-width: 360px;
+      min-height: 180px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.18);
+      overflow: hidden;
+      resize: both;
+      z-index: 25;
+    }
+
+    .code-panel.is-visible {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .code-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(246, 246, 246, 0.95);
+      cursor: move;
+      user-select: none;
+    }
+
+    .code-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .code-panel-body {
+      display: flex;
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 10px 12px 12px;
+    }
+
+    .code-panel-body textarea {
+      height: 100%;
+      min-height: 0;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: #f2f2f2;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="section-title">
+      <h1>SVG Nudger v3</h1>
+      <button id="toolHelpBtn" class="info-icon" type="button" aria-label="Tool help">i</button>
+    </div>
+    <p class="hint">A tiny browser-only tool for manually aligning, multi-selecting, moving, and resizing SVG elements.</p>
+
+    <h2>Load SVG</h2>
+    <input type="file" id="fileInput" accept=".svg,image/svg+xml" />
+
+    <h2>Move / Resize Controls</h2>
+    <label for="snapSelect">Grid snapping</label>
+    <select id="snapSelect">
+      <option value="0">Off</option>
+      <option value="1" selected>1 px</option>
+      <option value="5">5 px</option>
+      <option value="10">10 px</option>
+      <option value="20">20 px</option>
+    </select>
+
+    <div class="row">
+      <button id="undoBtn" disabled>Undo</button>
+      <button id="redoBtn" disabled>Redo</button>
+    </div>
+
+    <h2>Selection</h2>
+    <div id="selectedInfo" class="info">No element selected.</div>
+
+    <h2 class="section-title">
+      <span>Export</span>
+      <button id="showCodePanelBtn" class="mini-icon" type="button" aria-label="Show current SVG code panel">+</button>
+    </h2>
+    <button id="copyBtn" disabled>Copy SVG Code</button>
+    <button id="downloadBtn" disabled>Download Edited SVG</button>
+
+    <div id="status" class="status">No SVG loaded.</div>
+  </aside>
+
+  <main>
+    <div id="svgHost">
+      <div class="empty">Open an SVG file to begin.</div>
+    </div>
+
+    <div id="codePanel" class="code-panel">
+      <div id="codePanelHeader" class="code-panel-header">
+        <div class="code-panel-title">
+          <span>Current SVG code</span>
+        </div>
+        <div class="panel-title">
+          <button id="codeModeToggle" class="mode-toggle is-canvas" type="button" aria-pressed="false">Canvas mode</button>
+          <button id="hideCodePanelBtn" class="mini-icon" type="button" aria-label="Hide current SVG code panel">-</button>
+        </div>
+      </div>
+      <div class="code-panel-body">
+        <textarea id="svgCode" wrap="off" spellcheck="false" placeholder="SVG code will appear here after loading. Edit here, then blur or press Ctrl/Cmd+Enter to apply."></textarea>
+      </div>
+    </div>
+
+    <div id="textControls" class="text-controls hidden">
+      <div class="panel-header">
+        <div class="panel-title">
+          <strong>Text style</strong>
+          <button id="textHelpBtn" class="info-icon" type="button" aria-label="Text style help">i</button>
+        </div>
+        <button id="textCloseBtn" class="panel-close" type="button" aria-label="Close text style panel">×</button>
+      </div>
+      <label for="fontFamilyInput">Font family</label>
+      <input id="fontFamilyInput" type="text" placeholder="Arial, Helvetica, sans-serif" />
+
+      <label for="fontSizeInput">Font size</label>
+      <input id="fontSizeInput" type="text" placeholder="16px, 1.2em, 24" />
+
+      <button id="applyTextBtn">Apply Text Style</button>
+    </div>
+  </main>
+
+  <div id="helpModal" class="help-modal" aria-hidden="true">
+    <div class="help-dialog" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <h3 id="helpTitle"></h3>
+      <pre id="helpBody"></pre>
+      <div class="help-actions">
+        <button id="helpCloseBtn" class="help-close" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const NS = "http://www.w3.org/2000/svg";
+
+    const fileInput = document.getElementById("fileInput");
+    const svgHost = document.getElementById("svgHost");
+    const statusEl = document.getElementById("status");
+    const selectedInfo = document.getElementById("selectedInfo");
+    const snapSelect = document.getElementById("snapSelect");
+    const undoBtn = document.getElementById("undoBtn");
+    const redoBtn = document.getElementById("redoBtn");
+    const copyBtn = document.getElementById("copyBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const codePanel = document.getElementById("codePanel");
+    const codePanelHeader = document.getElementById("codePanelHeader");
+    const svgCode = document.getElementById("svgCode");
+    const codeModeToggle = document.getElementById("codeModeToggle");
+    const showCodePanelBtn = document.getElementById("showCodePanelBtn");
+    const hideCodePanelBtn = document.getElementById("hideCodePanelBtn");
+    const toolHelpBtn = document.getElementById("toolHelpBtn");
+    const textHelpBtn = document.getElementById("textHelpBtn");
+    const textCloseBtn = document.getElementById("textCloseBtn");
+    const helpModal = document.getElementById("helpModal");
+    const helpTitle = document.getElementById("helpTitle");
+    const helpBody = document.getElementById("helpBody");
+    const helpCloseBtn = document.getElementById("helpCloseBtn");
+    const textControls = document.getElementById("textControls");
+    const fontFamilyInput = document.getElementById("fontFamilyInput");
+    const fontSizeInput = document.getElementById("fontSizeInput");
+    const applyTextBtn = document.getElementById("applyTextBtn");
+
+    let svg = null;
+    let overlay = null;
+    let selectedElements = new Set();
+    let fileName = "edited.svg";
+    let activeAction = null;
+    let activeCodePanelDrag = null;
+    let codePanelHidden = false;
+    let codeEditorDirty = false;
+    let interactionMode = "canvas";
+    let lastFocusedBeforeHelp = null;
+    let textPanelDismissed = false;
+
+    const undoStack = [];
+    const redoStack = [];
+
+    const toolHelpText = [
+      "Click to select one object.",
+      "Shift + click to add/remove objects.",
+      "Drag a selected object to move the whole selection.",
+      "Drag the box handles to resize.",
+      "Hold Shift while resizing from a corner to preserve proportion.",
+      "Use arrow keys for fine movement.",
+      "Single-select an object to auto-locate its SVG code."
+    ].join("\n");
+
+    const textHelpText = "Works on selected <text> and <tspan> elements. Multiple selected text elements are updated together.";
+
+    fileInput.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const text = await file.text();
+      fileName = file.name.replace(/\.svg$/i, "") + "-edited.svg";
+      loadSvg(text);
+    });
+
+    function loadSvg(text) {
+      const parsed = parseSvgMarkup(text);
+      if (!parsed.ok) {
+        clearLoadedSvgState();
+        svgHost.replaceChildren(createEmptyMessage("Invalid SVG file."));
+        setExportEnabled(false);
+        updateSelectionUI();
+        updateHistoryButtons();
+        updateSvgCode({ force: true });
+        setInteractionMode("canvas", { syncFocus: false });
+        setStatus(parsed.error);
+        return;
+      }
+
+      mountSvg(parsed.svg);
+    }
+
+    function parseSvgMarkup(text) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "image/svg+xml");
+      const parserError = doc.querySelector("parsererror");
+
+      if (parserError) {
+        return {
+          ok: false,
+          error: parserError.textContent ? parserError.textContent.trim() : "Invalid SVG markup."
+        };
+      }
+
+      const svgElement = doc.documentElement;
+      if (!svgElement || svgElement.tagName.toLowerCase() !== "svg") {
+        return {
+          ok: false,
+          error: "The content does not contain an <svg> root element."
+        };
+      }
+
+      return {
+        ok: true,
+        svg: document.importNode(svgElement, true)
+      };
+    }
+
+    function createEmptyMessage(message) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = message;
+      return empty;
+    }
+
+    function clearLoadedSvgState(options = {}) {
+      svg = null;
+      overlay = null;
+      activeAction = null;
+      selectedElements.forEach(el => el.removeAttribute("data-nudger-selected-ui"));
+      selectedElements.clear();
+      undoStack.length = 0;
+      redoStack.length = 0;
+      codeEditorDirty = false;
+      textPanelDismissed = false;
+      if (!options.preserveMode) {
+        setInteractionMode("canvas", { syncFocus: false });
+      }
+    }
+
+    function mountSvg(svgElement) {
+      clearLoadedSvgState({ preserveMode: true });
+      svgHost.replaceChildren(svgElement);
+      svg = svgElement;
+
+      ensureOverlay();
+
+      svg.addEventListener("pointerdown", onPointerDown);
+      svg.addEventListener("pointermove", onPointerMove);
+      svg.addEventListener("pointerup", onPointerUp);
+      svg.addEventListener("pointercancel", onPointerUp);
+      svg.addEventListener("pointerleave", onPointerUp);
+
+      setExportEnabled(true);
+      updateSelectionUI();
+      updateHistoryButtons();
+      updateSvgCode({ force: true });
+      setInteractionMode(interactionMode === "code" ? "code" : "canvas", { syncFocus: false });
+      setStatus("SVG loaded. Click an object to select it.");
+    }
+
+    function setExportEnabled(enabled) {
+      copyBtn.disabled = !enabled;
+      downloadBtn.disabled = !enabled;
+      showCodePanelBtn.disabled = !enabled;
+      codePanel.classList.toggle("is-visible", enabled && !codePanelHidden);
+    }
+
+    function hideCodePanel() {
+      if (!svg) return;
+      codePanelHidden = true;
+      codePanel.classList.remove("is-visible");
+    }
+
+    function showCodePanel() {
+      if (!svg) return;
+      codePanelHidden = false;
+      codePanel.classList.add("is-visible");
+      if (interactionMode === "code") {
+        if (selectedElements.size === 1) {
+          updateSvgCode({ locateSelection: true });
+        } else {
+          svgCode.focus({ preventScroll: true });
+        }
+      }
+    }
+
+    toolHelpBtn.addEventListener("click", () => {
+      openHelpModal("SVG Nudger v3", toolHelpText);
+    });
+
+    textHelpBtn.addEventListener("click", () => {
+      openHelpModal("Text style", textHelpText);
+    });
+
+    textCloseBtn.addEventListener("click", () => {
+      textPanelDismissed = true;
+      updateTextControls();
+    });
+
+    showCodePanelBtn.addEventListener("click", () => {
+      showCodePanel();
+    });
+
+    hideCodePanelBtn.addEventListener("click", () => {
+      hideCodePanel();
+    });
+
+    helpCloseBtn.addEventListener("click", closeHelpModal);
+
+    helpModal.addEventListener("click", (event) => {
+      if (event.target === helpModal) {
+        closeHelpModal();
+      }
+    });
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function openHelpModal(title, body) {
+      lastFocusedBeforeHelp = document.activeElement;
+      helpTitle.textContent = title;
+      helpBody.textContent = body;
+      helpModal.classList.add("is-open");
+      helpModal.setAttribute("aria-hidden", "false");
+      helpCloseBtn.focus({ preventScroll: true });
+    }
+
+    function closeHelpModal() {
+      helpModal.classList.remove("is-open");
+      helpModal.setAttribute("aria-hidden", "true");
+
+      const focusTarget = lastFocusedBeforeHelp;
+      lastFocusedBeforeHelp = null;
+
+      if (focusTarget && typeof focusTarget.focus === "function") {
+        focusTarget.focus({ preventScroll: true });
+      }
+    }
+
+    codePanelHeader.addEventListener("pointerdown", (event) => {
+      if (event.target.closest("button")) return;
+      if (event.button !== 0) return;
+
+      const rect = codePanel.getBoundingClientRect();
+      activeCodePanelDrag = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top
+      };
+      codePanelHeader.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+
+    codePanelHeader.addEventListener("pointermove", (event) => {
+      if (!activeCodePanelDrag || event.pointerId !== activeCodePanelDrag.pointerId) return;
+
+      const panelWidth = codePanel.offsetWidth;
+      const panelHeight = codePanel.offsetHeight;
+      const minLeft = 8;
+      const maxLeft = Math.max(minLeft, window.innerWidth - panelWidth - 8);
+      const maxTop = Math.max(8, window.innerHeight - panelHeight - 8);
+
+      const nextLeft = clamp(event.clientX - activeCodePanelDrag.offsetX, minLeft, maxLeft);
+      const nextTop = clamp(event.clientY - activeCodePanelDrag.offsetY, 8, maxTop);
+
+      codePanel.style.left = `${nextLeft}px`;
+      codePanel.style.top = `${nextTop}px`;
+      event.preventDefault();
+    });
+
+    codePanelHeader.addEventListener("pointerup", endCodePanelDrag);
+    codePanelHeader.addEventListener("pointercancel", endCodePanelDrag);
+
+    function endCodePanelDrag(event) {
+      if (!activeCodePanelDrag || event.pointerId !== activeCodePanelDrag.pointerId) return;
+      activeCodePanelDrag = null;
+      if (codePanelHeader.hasPointerCapture(event.pointerId)) {
+        codePanelHeader.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function getSnap() {
+      return Number(snapSelect.value || 0);
+    }
+
+    function snapValue(value) {
+      const snap = getSnap();
+      return snap > 0 ? Math.round(value / snap) * snap : value;
+    }
+
+    function snapDelta(value) {
+      const snap = getSnap();
+      return snap > 0 ? Math.round(value / snap) * snap : value;
+    }
+
+    function svgPoint(event) {
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      return point.matrixTransform(svg.getScreenCTM().inverse());
+    }
+
+    function identityMatrix() {
+      return svg.createSVGMatrix();
+    }
+
+    function ownMatrix(el) {
+      const transform = el.transform && el.transform.baseVal ? el.transform.baseVal.consolidate() : null;
+      return transform ? transform.matrix : identityMatrix();
+    }
+
+    function parentCtm(el) {
+      const parent = el.parentNode;
+      if (parent && typeof parent.getCTM === "function") {
+        const matrix = parent.getCTM();
+        if (matrix) return matrix;
+      }
+      return identityMatrix();
+    }
+
+    function matrixToString(m) {
+      return `matrix(${fmt(m.a)} ${fmt(m.b)} ${fmt(m.c)} ${fmt(m.d)} ${fmt(m.e)} ${fmt(m.f)})`;
+    }
+
+    function fmt(value) {
+      if (!Number.isFinite(value)) return "0";
+      const fixed = Number(value).toFixed(3);
+      return fixed.replace(/\.000$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+    }
+
+    function setOwnMatrix(el, matrix) {
+      el.setAttribute("transform", matrixToString(matrix));
+    }
+
+    function translationMatrix(dx, dy) {
+      const matrix = identityMatrix();
+      matrix.e = dx;
+      matrix.f = dy;
+      return matrix;
+    }
+
+    function scaleMatrix(anchorX, anchorY, sx, sy) {
+      const matrix = identityMatrix();
+      matrix.a = sx;
+      matrix.d = sy;
+      matrix.e = anchorX * (1 - sx);
+      matrix.f = anchorY * (1 - sy);
+      return matrix;
+    }
+
+    function applyRootMatrixFromStart(entry, rootMatrix) {
+      const next = entry.parentMatrix
+        .inverse()
+        .multiply(rootMatrix)
+        .multiply(entry.parentMatrix)
+        .multiply(entry.startMatrix);
+      setOwnMatrix(entry.element, next);
+    }
+
+    function captureSelectionStart() {
+      return Array.from(selectedElements).map(element => ({
+        element,
+        before: element.getAttribute("transform") || "",
+        startMatrix: ownMatrix(element),
+        parentMatrix: parentCtm(element)
+      }));
+    }
+
+    function commitHistory(startEntries) {
+      const items = startEntries.map(entry => ({
+        element: entry.element,
+        before: entry.before,
+        after: entry.element.getAttribute("transform") || ""
+      })).filter(item => item.before !== item.after);
+
+      if (items.length > 0) {
+        undoStack.push({ items });
+        redoStack.length = 0;
+        updateHistoryButtons();
+      }
+    }
+
+    function isOverlayElement(el) {
+      return Boolean(el && el.closest && el.closest('[data-nudger-overlay="true"]'));
+    }
+
+    function isSelectableElement(el) {
+      if (!svg || !el || el === svg) return false;
+      if (isOverlayElement(el)) return false;
+      if (el.closest("defs, style, script, metadata")) return false;
+      if (!svg.contains(el)) return false;
+      if (typeof el.getBBox !== "function") return false;
+      return true;
+    }
+
+    function clearSelection() {
+      selectedElements.forEach(el => el.removeAttribute("data-nudger-selected-ui"));
+      selectedElements.clear();
+      textPanelDismissed = false;
+    }
+
+    function selectOnly(el) {
+      clearSelection();
+      if (isSelectableElement(el)) {
+        selectedElements.add(el);
+        el.setAttribute("data-nudger-selected-ui", "true");
+        textPanelDismissed = false;
+      }
+      updateSelectionUI();
+      updateSvgCode({ locateSelection: true });
+    }
+
+    function toggleSelection(el) {
+      if (!isSelectableElement(el)) return;
+      if (selectedElements.has(el)) {
+        selectedElements.delete(el);
+        el.removeAttribute("data-nudger-selected-ui");
+      } else {
+        selectedElements.add(el);
+        el.setAttribute("data-nudger-selected-ui", "true");
+        textPanelDismissed = false;
+      }
+      updateSelectionUI();
+      updateSvgCode({ locateSelection: selectedElements.size === 1 });
+    }
+
+    function selectFromHistory(items) {
+      clearSelection();
+      items.forEach(item => {
+        if (isSelectableElement(item.element)) {
+          selectedElements.add(item.element);
+          item.element.setAttribute("data-nudger-selected-ui", "true");
+        }
+      });
+      if (selectedTextElements().length > 0) textPanelDismissed = false;
+      updateSelectionUI();
+    }
+
+    function onPointerDown(event) {
+      if (!svg) return;
+
+      const handle = event.target.closest && event.target.closest("[data-nudger-handle]");
+      if (handle && isOverlayElement(handle) && selectedElements.size > 0) {
+        startResize(event, handle.getAttribute("data-nudger-handle"));
+        event.preventDefault();
+        return;
+      }
+
+      const target = event.target;
+      if (!isSelectableElement(target)) {
+        const nearby = findNearbySelectableElement(event);
+        if (nearby) {
+          if (event.shiftKey) {
+            toggleSelection(nearby);
+            setStatus(`${selectedElements.size} object(s) selected.`);
+            event.preventDefault();
+            return;
+          }
+
+          if (!selectedElements.has(nearby)) {
+            selectOnly(nearby);
+          }
+
+          startMove(event);
+          event.preventDefault();
+          return;
+        }
+
+        if (!isOverlayElement(target) && !event.shiftKey) {
+          clearSelection();
+          updateSelectionUI();
+          updateSvgCode();
+        }
+        return;
+      }
+
+      if (event.shiftKey) {
+        toggleSelection(target);
+        setStatus(`${selectedElements.size} object(s) selected.`);
+        event.preventDefault();
+        return;
+      }
+
+      if (!selectedElements.has(target)) {
+        selectOnly(target);
+      } else if (interactionMode === "code" && selectedElements.size === 1) {
+        updateSvgCode({ locateSelection: true });
+      }
+
+      startMove(event);
+      event.preventDefault();
+    }
+
+    function findNearbySelectableElement(event) {
+      const tolerance = 8;
+      const point = { x: event.clientX, y: event.clientY };
+      let best = null;
+      let bestDistance = Infinity;
+
+      svg.querySelectorAll("*").forEach(el => {
+        if (!isSelectableElement(el)) return;
+
+        const tag = (el.tagName || "").toLowerCase();
+        const isThinElement = ["line", "path", "polyline", "polygon"].includes(tag);
+        if (!isThinElement) return;
+
+        const bounds = screenBoundsForElement(el);
+        if (!bounds) return;
+
+        const distance = distanceToRect(point.x, point.y, bounds);
+        if (distance <= tolerance && distance < bestDistance) {
+          best = el;
+          bestDistance = distance;
+        }
+      });
+
+      return best;
+    }
+
+    function screenBoundsForElement(el) {
+      try {
+        const box = el.getBBox();
+        const ctm = el.getScreenCTM();
+        if (!ctm) return null;
+
+        const points = [
+          screenPointFromLocal(ctm, box.x, box.y),
+          screenPointFromLocal(ctm, box.x + box.width, box.y),
+          screenPointFromLocal(ctm, box.x + box.width, box.y + box.height),
+          screenPointFromLocal(ctm, box.x, box.y + box.height)
+        ];
+
+        const xs = points.map(point => point.x);
+        const ys = points.map(point => point.y);
+        return {
+          x: Math.min(...xs),
+          y: Math.min(...ys),
+          width: Math.max(...xs) - Math.min(...xs),
+          height: Math.max(...ys) - Math.min(...ys)
+        };
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function screenPointFromLocal(matrix, x, y) {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(matrix);
+    }
+
+    function distanceToRect(x, y, rect) {
+      const dx = x < rect.x ? rect.x - x : x > rect.x + rect.width ? x - (rect.x + rect.width) : 0;
+      const dy = y < rect.y ? rect.y - y : y > rect.y + rect.height ? y - (rect.y + rect.height) : 0;
+      return Math.hypot(dx, dy);
+    }
+
+    function startMove(event) {
+      activeAction = {
+        mode: "move",
+        pointerId: event.pointerId,
+        startPoint: svgPoint(event),
+        startEntries: captureSelectionStart()
+      };
+      event.target.setPointerCapture(event.pointerId);
+    }
+
+    function startResize(event, handleName) {
+      const bbox = selectionBBox();
+      if (!bbox || bbox.width === 0 || bbox.height === 0) return;
+
+      activeAction = {
+        mode: "resize",
+        pointerId: event.pointerId,
+        handle: handleName,
+        startPoint: svgPoint(event),
+        startBBox: bbox,
+        startEntries: captureSelectionStart()
+      };
+      event.target.setPointerCapture(event.pointerId);
+      setStatus("Drag resize handle. Hold Shift on a corner to preserve proportion.");
+    }
+
+    function onPointerMove(event) {
+      if (!activeAction || event.pointerId !== activeAction.pointerId) return;
+
+      if (activeAction.mode === "move") {
+        moveDuringPointer(event);
+      } else if (activeAction.mode === "resize") {
+        resizeDuringPointer(event);
+      }
+
+      updateSelectionUI();
+      updateSvgCode();
+      event.preventDefault();
+    }
+
+    function moveDuringPointer(event) {
+      const currentPoint = svgPoint(event);
+      const dx = snapDelta(currentPoint.x - activeAction.startPoint.x);
+      const dy = snapDelta(currentPoint.y - activeAction.startPoint.y);
+      const matrix = translationMatrix(dx, dy);
+
+      activeAction.startEntries.forEach(entry => applyRootMatrixFromStart(entry, matrix));
+    }
+
+    function resizeDuringPointer(event) {
+      const current = svgPoint(event);
+      const box = activeAction.startBBox;
+      const handle = activeAction.handle;
+      const minSize = 1;
+
+      let anchorX = box.x + box.width / 2;
+      let anchorY = box.y + box.height / 2;
+      let sx = 1;
+      let sy = 1;
+
+      const right = box.x + box.width;
+      const bottom = box.y + box.height;
+      let px = snapValue(current.x);
+      let py = snapValue(current.y);
+
+      if (handle.includes("e")) {
+        anchorX = box.x;
+        px = Math.max(px, anchorX + minSize);
+        sx = (px - anchorX) / box.width;
+      } else if (handle.includes("w")) {
+        anchorX = right;
+        px = Math.min(px, anchorX - minSize);
+        sx = (anchorX - px) / box.width;
+      }
+
+      if (handle.includes("s")) {
+        anchorY = box.y;
+        py = Math.max(py, anchorY + minSize);
+        sy = (py - anchorY) / box.height;
+      } else if (handle.includes("n")) {
+        anchorY = bottom;
+        py = Math.min(py, anchorY - minSize);
+        sy = (anchorY - py) / box.height;
+      }
+
+      const isCorner = (handle.includes("n") || handle.includes("s")) && (handle.includes("e") || handle.includes("w"));
+      if (event.shiftKey && isCorner) {
+        const uniform = Math.max(Math.abs(sx), Math.abs(sy));
+        sx = uniform;
+        sy = uniform;
+      }
+
+      const matrix = scaleMatrix(anchorX, anchorY, sx, sy);
+      activeAction.startEntries.forEach(entry => applyRootMatrixFromStart(entry, matrix));
+    }
+
+    function onPointerUp(event) {
+      if (!activeAction || event.pointerId !== activeAction.pointerId) return;
+      commitHistory(activeAction.startEntries);
+      activeAction = null;
+      updateSelectionUI();
+      updateSvgCode({ locateSelection: selectedElements.size === 1 });
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && helpModal.classList.contains("is-open")) {
+        closeHelpModal();
+        event.preventDefault();
+        return;
+      }
+
+      if (event.key === "Escape") {
+        clearSelection();
+        updateSelectionUI();
+        updateSvgCode();
+        event.preventDefault();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        if (document.activeElement === svgCode) return;
+        if (event.shiftKey) redo();
+        else undo();
+        event.preventDefault();
+        return;
+      }
+
+      if (interactionMode === "code") return;
+      if (document.activeElement === svgCode) return;
+
+      if (!svg || selectedElements.size === 0) return;
+
+      const snap = getSnap() || 1;
+      const multiplier = event.shiftKey ? 10 : 1;
+      const step = snap * multiplier;
+
+      let dx = 0;
+      let dy = 0;
+
+      if (event.key === "ArrowLeft") dx = -step;
+      if (event.key === "ArrowRight") dx = step;
+      if (event.key === "ArrowUp") dy = -step;
+      if (event.key === "ArrowDown") dy = step;
+
+      if (dx !== 0 || dy !== 0) {
+        const entries = captureSelectionStart();
+        const matrix = translationMatrix(dx, dy);
+        entries.forEach(entry => applyRootMatrixFromStart(entry, matrix));
+        commitHistory(entries);
+        updateSelectionUI();
+        updateSvgCode();
+        event.preventDefault();
+      }
+    });
+
+    function undo() {
+      const entry = undoStack.pop();
+      if (!entry) return;
+      entry.items.forEach(item => restoreHistoryItem(item, "before"));
+      redoStack.push(entry);
+      selectFromHistory(entry.items);
+      updateHistoryButtons();
+      updateSelectionUI();
+      updateSvgCode({ locateSelection: selectedElements.size === 1 });
+      setStatus("Undo applied.");
+    }
+
+    function redo() {
+      const entry = redoStack.pop();
+      if (!entry) return;
+      entry.items.forEach(item => restoreHistoryItem(item, "after"));
+      undoStack.push(entry);
+      selectFromHistory(entry.items);
+      updateHistoryButtons();
+      updateSelectionUI();
+      updateSvgCode({ locateSelection: selectedElements.size === 1 });
+      setStatus("Redo applied.");
+    }
+
+    function restoreHistoryItem(item, key) {
+      if (item.attr) restoreAttribute(item.element, item.attr, item[key]);
+      else restoreTransform(item.element, item[key]);
+    }
+
+    function restoreTransform(element, value) {
+      if (value) element.setAttribute("transform", value);
+      else element.removeAttribute("transform");
+    }
+
+    function restoreAttribute(element, attr, value) {
+      if (value) element.setAttribute(attr, value);
+      else element.removeAttribute(attr);
+    }
+
+    function updateHistoryButtons() {
+      undoBtn.disabled = undoStack.length === 0;
+      redoBtn.disabled = redoStack.length === 0;
+    }
+
+    undoBtn.addEventListener("click", undo);
+    redoBtn.addEventListener("click", redo);
+
+    function ensureOverlay() {
+      if (!svg) return;
+      overlay = document.createElementNS(NS, "g");
+      overlay.setAttribute("data-nudger-overlay", "true");
+      overlay.setAttribute("pointer-events", "none");
+      svg.appendChild(overlay);
+    }
+
+    function selectionBBox() {
+      if (!svg || selectedElements.size === 0) return null;
+
+      const points = [];
+      selectedElements.forEach(el => {
+        try {
+          const box = el.getBBox();
+          const matrix = el.getCTM();
+          if (!matrix) return;
+          const corners = [
+            [box.x, box.y],
+            [box.x + box.width, box.y],
+            [box.x + box.width, box.y + box.height],
+            [box.x, box.y + box.height]
+          ];
+          corners.forEach(([x, y]) => {
+            const point = svg.createSVGPoint();
+            point.x = x;
+            point.y = y;
+            points.push(point.matrixTransform(matrix));
+          });
+        } catch (error) {
+          // Some SVG nodes may not expose a usable bbox. Skip them.
+        }
+      });
+
+      if (points.length === 0) return null;
+
+      const xs = points.map(p => p.x);
+      const ys = points.map(p => p.y);
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      const maxX = Math.max(...xs);
+      const maxY = Math.max(...ys);
+
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    function updateOverlay() {
+      if (!overlay) return;
+      overlay.innerHTML = "";
+
+      const box = selectionBBox();
+      if (!box) return;
+
+      const rect = document.createElementNS(NS, "rect");
+      rect.setAttribute("x", box.x);
+      rect.setAttribute("y", box.y);
+      rect.setAttribute("width", box.width);
+      rect.setAttribute("height", box.height);
+      rect.setAttribute("fill", "rgba(229,57,53,0.06)");
+      rect.setAttribute("stroke", "#e53935");
+      rect.setAttribute("stroke-width", "1.5");
+      rect.setAttribute("stroke-dasharray", "5 4");
+      rect.setAttribute("vector-effect", "non-scaling-stroke");
+      rect.setAttribute("pointer-events", "none");
+      overlay.appendChild(rect);
+
+      const positions = {
+        nw: [box.x, box.y],
+        n: [box.x + box.width / 2, box.y],
+        ne: [box.x + box.width, box.y],
+        e: [box.x + box.width, box.y + box.height / 2],
+        se: [box.x + box.width, box.y + box.height],
+        s: [box.x + box.width / 2, box.y + box.height],
+        sw: [box.x, box.y + box.height],
+        w: [box.x, box.y + box.height / 2]
+      };
+
+      Object.entries(positions).forEach(([name, [x, y]]) => {
+        const handle = document.createElementNS(NS, "rect");
+        handle.setAttribute("x", x - 4);
+        handle.setAttribute("y", y - 4);
+        handle.setAttribute("width", 8);
+        handle.setAttribute("height", 8);
+        handle.setAttribute("rx", 1.5);
+        handle.setAttribute("fill", "#ffffff");
+        handle.setAttribute("stroke", "#e53935");
+        handle.setAttribute("stroke-width", "1.5");
+        handle.setAttribute("vector-effect", "non-scaling-stroke");
+        handle.setAttribute("data-nudger-handle", name);
+        handle.setAttribute("pointer-events", "all");
+        handle.style.cursor = cursorForHandle(name);
+        overlay.appendChild(handle);
+      });
+    }
+
+    function cursorForHandle(name) {
+      const cursors = {
+        n: "ns-resize",
+        s: "ns-resize",
+        e: "ew-resize",
+        w: "ew-resize",
+        nw: "nwse-resize",
+        se: "nwse-resize",
+        ne: "nesw-resize",
+        sw: "nesw-resize"
+      };
+      return cursors[name] || "default";
+    }
+
+    function updateSelectionUI() {
+      updateOverlay();
+      updateSelectedInfo();
+      updateTextControls();
+    }
+
+    function updateSelectedInfo() {
+      if (selectedElements.size === 0) {
+        selectedInfo.innerHTML = "No element selected.";
+        return;
+      }
+
+      const items = Array.from(selectedElements).slice(0, 12).map(el => {
+        const tag = el.tagName;
+        const id = el.getAttribute("id") || "—";
+        const className = cleanedClassName(el) || "—";
+        const transform = el.getAttribute("transform") || "—";
+        return `<li>&lt;${escapeHtml(tag)}&gt; id=${escapeHtml(id)} class=${escapeHtml(className)}<br><code>${escapeHtml(transform)}</code></li>`;
+      }).join("");
+
+      const extra = selectedElements.size > 12 ? `<div>Showing 12 of ${selectedElements.size} objects.</div>` : "";
+      selectedInfo.innerHTML = `
+        <div><strong>${selectedElements.size}</strong> object(s) selected.</div>
+        <ul class="tiny-list">${items}</ul>
+        ${extra}
+      `;
+    }
+
+    function cleanedClassName(el) {
+      return Array.from(el.classList || []).join(" ");
+    }
+
+    function cleanCloneForExport(clone) {
+      clone.querySelectorAll('[data-nudger-overlay="true"]').forEach(el => el.remove());
+      clone.querySelectorAll('[data-nudger-selected-ui="true"]').forEach(el => {
+        el.removeAttribute("data-nudger-selected-ui");
+      });
+      return clone;
+    }
+
+    function cloneCleanSvg() {
+      if (!svg) return null;
+      return cleanCloneForExport(svg.cloneNode(true));
+    }
+
+    function serializeSvg(targetElement = null) {
+      if (!svg) return { source: "", locator: null };
+
+      const clone = svg.cloneNode(true);
+      let targetClone = null;
+      let token = null;
+
+      if (targetElement) {
+        const path = pathToElement(targetElement);
+        targetClone = elementFromPath(clone, path);
+      }
+
+      cleanCloneForExport(clone);
+
+      if (targetClone && clone.contains(targetClone)) {
+        token = `nudger-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        targetClone.setAttribute("data-nudger-locator", token);
+      }
+
+      const serializer = new XMLSerializer();
+      let source = serializer.serializeToString(clone);
+
+      if (!/xmlns=/.test(source)) {
+        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
+      source = source.replace(/\s+xmlns="http:\/\/www\.w3\.org\/2000\/svg"\s+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/, ' xmlns="http://www.w3.org/2000/svg"');
+      source = prettySvg(source);
+
+      let locator = null;
+      if (token) {
+        const attrPattern = new RegExp(`\\sdata-nudger-locator="${escapeRegExp(token)}"`);
+        const attrMatch = source.match(attrPattern);
+        if (attrMatch) {
+          const attrStart = source.indexOf(attrMatch[0]);
+          const tagStart = source.lastIndexOf("<", attrStart);
+          const tagEndBeforeClean = source.indexOf(">", attrStart) + 1;
+          source = source.replace(attrPattern, "");
+          locator = {
+            start: tagStart,
+            end: Math.max(tagStart + 1, tagEndBeforeClean - attrMatch[0].length)
+          };
+        }
+      }
+
+      return { source, locator };
+    }
+
+    function prettySvg(source) {
+      return source.replace(/></g, ">\n<");
+    }
+
+    function pathToElement(element) {
+      const path = [];
+      let node = element;
+      while (node && node !== svg) {
+        const parent = node.parentNode;
+        if (!parent) return [];
+        path.unshift(Array.from(parent.children).indexOf(node));
+        node = parent;
+      }
+      return path;
+    }
+
+    function elementFromPath(root, path) {
+      let node = root;
+      for (const index of path) {
+        if (!node || index < 0) return null;
+        node = Array.from(node.children)[index];
+      }
+      return node;
+    }
+
+    function updateSvgCode(options = {}) {
+      if (!svg) {
+        if (options.force || document.activeElement !== svgCode) {
+          svgCode.value = "";
+        }
+        codeEditorDirty = false;
+        return;
+      }
+
+      if (document.activeElement === svgCode && !options.force && !options.locateSelection) {
+        return;
+      }
+
+      const target = options.locateSelection && selectedElements.size === 1
+        ? Array.from(selectedElements)[0]
+        : null;
+      const result = serializeSvg(target);
+      svgCode.value = result.source;
+      codeEditorDirty = false;
+
+      if (result.locator) {
+        locateInSvgCode(result.locator.start, result.locator.end);
+      }
+    }
+
+    function locateInSvgCode(start, end) {
+      if (codePanelHidden) {
+        svgCode.setSelectionRange(start, end);
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        svgCode.focus({ preventScroll: true });
+        svgCode.setSelectionRange(start, end);
+        const before = svgCode.value.slice(0, start);
+        const lineCount = before.split("\n").length - 1;
+        const lineHeight = textareaLineHeight(svgCode);
+
+        window.requestAnimationFrame(() => {
+          svgCode.scrollTop = Math.max(0, (lineCount - 3) * lineHeight);
+          svgCode.scrollLeft = 0;
+        });
+      });
+    }
+
+    function textareaLineHeight(el) {
+      const computed = window.getComputedStyle(el);
+      const parsed = Number.parseFloat(computed.lineHeight);
+      if (Number.isFinite(parsed)) return parsed;
+
+      const fontSize = Number.parseFloat(computed.fontSize);
+      return Number.isFinite(fontSize) ? fontSize * 1.2 : 16;
+    }
+
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    function selectedTextElements() {
+      return Array.from(selectedElements).filter(isTextElement);
+    }
+
+    function isTextElement(el) {
+      const tag = (el.tagName || "").toLowerCase();
+      return tag === "text" || tag === "tspan";
+    }
+
+    function updateTextControls() {
+      if (!textControls) return;
+      const textEls = selectedTextElements();
+
+      if (textEls.length === 0 || textEls.length !== selectedElements.size || textPanelDismissed) {
+        textControls.classList.remove("is-visible");
+        textControls.classList.add("hidden");
+        return;
+      }
+
+      textControls.classList.remove("hidden");
+      textControls.classList.add("is-visible");
+      fontFamilyInput.value = commonAttributeValue(textEls, "font-family");
+      fontSizeInput.value = commonAttributeValue(textEls, "font-size");
+    }
+
+    function commonAttributeValue(elements, attr) {
+      if (elements.length === 0) return "";
+      const values = elements.map(el => el.getAttribute(attr) || "");
+      const first = values[0];
+      return values.every(value => value === first) ? first : "";
+    }
+
+    function normalizeFontSize(value) {
+      const trimmed = value.trim();
+      if (!trimmed) return "";
+      return /^[-+]?[0-9]*\.?[0-9]+$/.test(trimmed) ? `${trimmed}px` : trimmed;
+    }
+
+    function applyTextStyle() {
+      const textEls = selectedTextElements();
+      if (textEls.length === 0) {
+        setStatus("Select one or more <text> or <tspan> elements first.");
+        return;
+      }
+
+      const family = fontFamilyInput.value.trim();
+      const size = normalizeFontSize(fontSizeInput.value);
+      const changes = [];
+
+      textEls.forEach(element => {
+        if (family) {
+          changes.push({
+            element,
+            attr: "font-family",
+            before: element.getAttribute("font-family") || "",
+            after: family
+          });
+          element.setAttribute("font-family", family);
+        }
+
+        if (size) {
+          changes.push({
+            element,
+            attr: "font-size",
+            before: element.getAttribute("font-size") || "",
+            after: size
+          });
+          element.setAttribute("font-size", size);
+        }
+      });
+
+      const realChanges = changes.filter(item => item.before !== item.after);
+      if (realChanges.length > 0) {
+        undoStack.push({ items: realChanges });
+        redoStack.length = 0;
+        updateHistoryButtons();
+        updateSelectionUI();
+        updateSvgCode({ locateSelection: selectedElements.size === 1 });
+        setStatus(`Updated text style on ${textEls.length} text element(s).`);
+      } else {
+        setStatus("No text style changes to apply.");
+      }
+    }
+
+    applyTextBtn.addEventListener("click", applyTextStyle);
+
+    svgCode.addEventListener("input", () => {
+      codeEditorDirty = true;
+    });
+
+    svgCode.addEventListener("change", () => {
+      applySvgCodeEditor();
+    });
+
+    svgCode.addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "enter") {
+        applySvgCodeEditor();
+        event.preventDefault();
+      }
+    });
+
+    function applySvgCodeEditor() {
+      if (!svgCode) return false;
+
+      if (!codeEditorDirty && svg) {
+        return true;
+      }
+
+      const parsed = parseSvgMarkup(svgCode.value);
+      if (!parsed.ok) {
+        setStatus(parsed.error);
+        return false;
+      }
+
+      mountSvg(parsed.svg);
+      setStatus("Edited SVG code applied.");
+      return true;
+    }
+
+    function setInteractionMode(mode, options = {}) {
+      interactionMode = mode === "code" ? "code" : "canvas";
+      const isCodeMode = interactionMode === "code";
+      codeModeToggle.textContent = isCodeMode ? "Code edit mode" : "Canvas mode";
+      codeModeToggle.classList.toggle("is-code", isCodeMode);
+      codeModeToggle.classList.toggle("is-canvas", !isCodeMode);
+      codeModeToggle.setAttribute("aria-pressed", String(isCodeMode));
+      codeModeToggle.title = isCodeMode
+        ? "Code edit mode. Click to switch to canvas mode."
+        : "Canvas mode. Click to switch to code edit mode.";
+
+      if (!options.syncFocus) return;
+
+      if (isCodeMode) {
+        if (codePanelHidden) return;
+        svgCode.focus({ preventScroll: true });
+      } else if (document.activeElement === svgCode) {
+        svgCode.blur();
+      }
+    }
+
+    codeModeToggle.addEventListener("click", () => {
+      setInteractionMode(interactionMode === "code" ? "canvas" : "code", { syncFocus: true });
+    });
+
+    copyBtn.addEventListener("click", async () => {
+      if (!svg) return;
+      if (!applySvgCodeEditor()) return;
+      updateSvgCode({ force: true });
+
+      try {
+        await navigator.clipboard.writeText(svgCode.value);
+        setStatus("SVG code copied to clipboard.");
+      } catch (error) {
+        svgCode.focus();
+        svgCode.select();
+        document.execCommand("copy");
+        setStatus("SVG code copied using fallback copy.");
+      }
+    });
+
+    downloadBtn.addEventListener("click", () => {
+      if (!svg) return;
+      if (!applySvgCodeEditor()) return;
+      updateSvgCode({ force: true });
+      const blob = new Blob([svgCode.value], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus("Edited SVG downloaded.");
+    });
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
