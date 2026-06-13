@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SVG Nudger v3</title>
+  <title>SVG Nudger v3.1</title>
   <style>
     :root {
       --sidebar-width: 320px;
@@ -413,7 +413,7 @@
 <body>
   <aside>
     <div class="section-title">
-      <h1>SVG Nudger v3</h1>
+      <h1>SVG Nudger v3.1</h1>
       <button id="toolHelpBtn" class="info-icon" type="button" aria-label="Tool help">i</button>
     </div>
     <p class="hint">A tiny browser-only tool for manually aligning, multi-selecting, moving, and resizing SVG elements.</p>
@@ -549,10 +549,11 @@
       "Drag the box handles to resize.",
       "Hold Shift while resizing from a corner to preserve proportion.",
       "Use arrow keys for fine movement.",
+      "Option/Alt-click a <tspan> to select that exact line instead of its parent <text>.",
       "Single-select an object to auto-locate its SVG code."
     ].join("\n");
 
-    const textHelpText = "Works on selected <text> and <tspan> elements. Multiple selected text elements are updated together.";
+    const textHelpText = "Works on selected <text> and <tspan> elements. Multiple selected text elements are updated together. Plain clicks on nested <tspan> lines target the parent <text>; use Option/Alt-click to target one exact <tspan>.";
 
     fileInput.addEventListener("change", async (event) => {
       const file = event.target.files[0];
@@ -676,7 +677,7 @@
     }
 
     toolHelpBtn.addEventListener("click", () => {
-      openHelpModal("SVG Nudger v3", toolHelpText);
+      openHelpModal("SVG Nudger v3.1", toolHelpText);
     });
 
     textHelpBtn.addEventListener("click", () => {
@@ -889,6 +890,26 @@
       return true;
     }
 
+    function textContainerForElement(el) {
+      if (!el || !el.closest) return null;
+      const textRoot = el.closest("text");
+      return textRoot && svg && svg.contains(textRoot) ? textRoot : null;
+    }
+
+    function selectionTargetForEvent(el, event) {
+      if (!isSelectableElement(el)) return el;
+      if (event && event.altKey && isTextElement(el)) return el;
+
+      if ((el.tagName || "").toLowerCase() === "tspan") {
+        const textRoot = textContainerForElement(el);
+        if (textRoot && isSelectableElement(textRoot)) {
+          return textRoot;
+        }
+      }
+
+      return el;
+    }
+
     function clearSelection() {
       selectedElements.forEach(el => el.removeAttribute("data-nudger-selected-ui"));
       selectedElements.clear();
@@ -923,9 +944,10 @@
     function selectFromHistory(items) {
       clearSelection();
       items.forEach(item => {
-        if (isSelectableElement(item.element)) {
-          selectedElements.add(item.element);
-          item.element.setAttribute("data-nudger-selected-ui", "true");
+        const element = item.path ? elementFromPath(svg, item.path) : item.element;
+        if (isSelectableElement(element)) {
+          selectedElements.add(element);
+          element.setAttribute("data-nudger-selected-ui", "true");
         }
       });
       if (selectedTextElements().length > 0) textPanelDismissed = false;
@@ -946,15 +968,16 @@
       if (!isSelectableElement(target)) {
         const nearby = findNearbySelectableElement(event);
         if (nearby) {
+          const resolvedNearby = selectionTargetForEvent(nearby, event);
           if (event.shiftKey) {
-            toggleSelection(nearby);
+            toggleSelection(resolvedNearby);
             setStatus(`${selectedElements.size} object(s) selected.`);
             event.preventDefault();
             return;
           }
 
-          if (!selectedElements.has(nearby)) {
-            selectOnly(nearby);
+          if (!selectedElements.has(resolvedNearby)) {
+            selectOnly(resolvedNearby);
           }
 
           startMove(event);
@@ -970,15 +993,17 @@
         return;
       }
 
+      const resolvedTarget = selectionTargetForEvent(target, event);
+
       if (event.shiftKey) {
-        toggleSelection(target);
+        toggleSelection(resolvedTarget);
         setStatus(`${selectedElements.size} object(s) selected.`);
         event.preventDefault();
         return;
       }
 
-      if (!selectedElements.has(target)) {
-        selectOnly(target);
+      if (!selectedElements.has(resolvedTarget)) {
+        selectOnly(resolvedTarget);
       } else if (interactionMode === "code" && selectedElements.size === 1) {
         updateSvgCode({ locateSelection: true });
       }
@@ -1232,8 +1257,11 @@
     }
 
     function restoreHistoryItem(item, key) {
-      if (item.attr) restoreAttribute(item.element, item.attr, item[key]);
-      else restoreTransform(item.element, item[key]);
+      if (item.attr) {
+        restoreAttribute(item.element, item.attr, item[key]);
+      } else {
+        restoreTransform(item.element, item[key]);
+      }
     }
 
     function restoreTransform(element, value) {

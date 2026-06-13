@@ -1,4 +1,4 @@
-# SVG Nudger v3
+# SVG Nudger v3.1
 
 A very small browser-only SVG editing helper for human alignment work.
 
@@ -23,6 +23,7 @@ Codex generates SVG -> open in SVG Nudger -> manually align/resize -> copy or do
 - Auto-locate the selected single object in **Current SVG code**
 - Edit the SVG source directly in **Current SVG code** and apply it with blur or `Ctrl`/`Cmd` + `Enter`
 - Modify selected SVG text object font family and font size
+- Default nested `<tspan>` clicks to the parent `<text>` object, with `Option`/`Alt` + click for exact `<tspan>` selection
 - Copy edited SVG code
 - Download edited SVG
 
@@ -37,7 +38,8 @@ Codex generates SVG -> open in SVG Nudger -> manually align/resize -> copy or do
 7. If you select a single object, **Current SVG code** automatically scrolls to that element.
 8. Edit the SVG source directly in **Current SVG code**, then blur the field or press `Ctrl`/`Cmd` + `Enter` to apply it.
 9. If you select a `<text>` or `<tspan>` element, edit its font family or font size from **Text style**.
-10. Click **Copy SVG Code** or **Download Edited SVG**.
+10. For multi-line SVG text built with `<tspan>`, click normally to work on the parent `<text>` object, or use `Option`/`Alt` + click to target one exact line.
+11. Click **Copy SVG Code** or **Download Edited SVG**.
 
 ## Notes
 
