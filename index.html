@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SVG Nudger v3.2</title>
+  <title>SVG Nudger v3.3</title>
   <style>
     :root {
       --sidebar-width: 320px;
@@ -105,6 +105,24 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+
+    .compact-row {
+      display: grid;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .compact-row.is-three {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .compact-row.is-snap {
+      grid-template-columns: 1.2fr 1fr 1fr;
+    }
+
+    .compact-row label {
+      margin-top: 0;
     }
 
     .hint, .status, .info {
@@ -507,25 +525,45 @@
 <body>
   <aside>
     <div class="section-title">
-      <h1>SVG Nudger v3.2</h1>
+      <h1>SVG Nudger v3.3</h1>
       <button id="toolHelpBtn" class="info-icon" type="button" aria-label="Tool help">i</button>
     </div>
-    <p class="hint">A tiny browser-only tool for manually aligning, multi-selecting, moving, and resizing SVG elements.</p>
 
     <h2>Load SVG</h2>
     <input type="file" id="fileInput" accept=".svg,image/svg+xml" />
 
-    <h2>Move / Resize Controls</h2>
-    <label for="snapSelect">Grid snapping</label>
-    <select id="snapSelect">
-      <option value="0">Off</option>
-      <option value="1" selected>1 px</option>
-      <option value="5">5 px</option>
-      <option value="10">10 px</option>
-      <option value="20">20 px</option>
-    </select>
+    <h2 class="section-title">
+      <span>SVG Document</span>
+      <button id="svgDocHelpBtn" class="info-icon" type="button" aria-label="SVG document help">i</button>
+    </h2>
+    <div class="compact-row is-three">
+      <div>
+        <label for="svgWidthInput">Width</label>
+        <input id="svgWidthInput" type="text" placeholder="800" readonly />
+      </div>
+      <div>
+        <label for="svgHeightInput">Height</label>
+        <input id="svgHeightInput" type="text" placeholder="600" readonly />
+      </div>
+      <div>
+        <label for="fitPaddingInput">Fit Padding</label>
+        <input id="fitPaddingInput" type="text" placeholder="0" value="0" />
+      </div>
+    </div>
+    <button id="fitSvgToContentBtn" disabled>Fit SVG To Content</button>
 
-    <div class="row">
+    <h2>Move / Resize Controls</h2>
+    <div class="compact-row is-snap">
+      <div>
+        <label for="snapSelect">Grid snapping</label>
+        <select id="snapSelect">
+          <option value="0">Off</option>
+          <option value="1" selected>1 px</option>
+          <option value="5">5 px</option>
+          <option value="10">10 px</option>
+          <option value="20">20 px</option>
+        </select>
+      </div>
       <button id="undoBtn" disabled>Undo</button>
       <button id="redoBtn" disabled>Redo</button>
     </div>
@@ -615,6 +653,11 @@
     const snapSelect = document.getElementById("snapSelect");
     const undoBtn = document.getElementById("undoBtn");
     const redoBtn = document.getElementById("redoBtn");
+    const svgDocHelpBtn = document.getElementById("svgDocHelpBtn");
+    const svgWidthInput = document.getElementById("svgWidthInput");
+    const svgHeightInput = document.getElementById("svgHeightInput");
+    const fitPaddingInput = document.getElementById("fitPaddingInput");
+    const fitSvgToContentBtn = document.getElementById("fitSvgToContentBtn");
     const copyBtn = document.getElementById("copyBtn");
     const downloadBtn = document.getElementById("downloadBtn");
     const codePanel = document.getElementById("codePanel");
@@ -657,7 +700,7 @@
       "Shift + click to add/remove objects.",
       "Drag a selected object to move the whole selection.",
       "Drag the box handles to resize.",
-      "Single-select a curved <path> to reveal draggable end points, curve controls, and arc handles.",
+      "Single-select a <path> to reveal draggable end points, curve controls, and arc handles.",
       "Hold Shift while resizing from a corner to preserve proportion.",
       "Use arrow keys for fine movement.",
       "Option/Alt-click a <tspan> to select that exact line instead of its parent <text>.",
@@ -665,6 +708,19 @@
     ].join("\n");
 
     const textHelpText = "Works on selected <text> and <tspan> elements. Multiple selected text elements are updated together. Plain clicks on nested <tspan> lines target the parent <text>; use Option/Alt-click to target one exact <tspan>.";
+    const svgDocumentHelpText = [
+      "This workflow assumes you are not using tools such as rsvg or Inkscape for conversion.",
+      "",
+      "Fit SVG To Content rewrites the SVG file's viewBox, width, and height to the visible content bounds plus the padding value.",
+      "",
+      "For PDF export, one practical workflow is:",
+      "1. Open the SVG in Safari.",
+      "2. Print to PDF.",
+      "3. Use a custom paper size matching the Width and Height values shown here in px.",
+      "4. Adjust print scale as needed.",
+      "",
+      "The 340% scale value you found can work in practice, but it is not a universal ratio. Safari print scaling is workflow-specific, so treat 340% as a starting point, not a guaranteed rule."
+    ].join("\n");
 
     fileInput.addEventListener("change", async (event) => {
       const file = event.target.files[0];
@@ -681,6 +737,7 @@
         clearLoadedSvgState();
         svgHost.replaceChildren(createEmptyMessage("Invalid SVG file."));
         setExportEnabled(false);
+        updateDocumentSizeControls();
         updateSelectionUI();
         updateHistoryButtons();
         updateSvgCode({ force: true });
@@ -725,6 +782,31 @@
       return empty;
     }
 
+    function intrinsicSvgSize(svgElement) {
+      const viewBox = svgElement.viewBox && svgElement.viewBox.baseVal
+        ? svgElement.viewBox.baseVal
+        : null;
+      const widthAttr = parseSvgLength(svgElement.getAttribute("width"));
+      const heightAttr = parseSvgLength(svgElement.getAttribute("height"));
+
+      if (widthAttr && heightAttr) {
+        return { width: widthAttr, height: heightAttr };
+      }
+      if (viewBox && viewBox.width > 0 && viewBox.height > 0) {
+        return { width: viewBox.width, height: viewBox.height };
+      }
+
+      return { width: 800, height: 600 };
+    }
+
+    function parseSvgLength(value) {
+      if (!value) return 0;
+      const match = String(value).match(/[-+]?(?:\d*\.\d+|\d+)/);
+      if (!match) return 0;
+      const parsed = Number.parseFloat(match[0]);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
     function clearLoadedSvgState(options = {}) {
       svg = null;
       overlay = null;
@@ -735,6 +817,7 @@
       redoStack.length = 0;
       codeEditorDirty = false;
       textPanelDismissed = false;
+      updateDocumentSizeControls();
       if (!options.preserveMode) {
         setInteractionMode("canvas", { syncFocus: false });
       }
@@ -754,6 +837,7 @@
       svg.addEventListener("pointerleave", onPointerUp);
 
       setExportEnabled(true);
+      updateDocumentSizeControls();
       updateSelectionUI();
       updateHistoryButtons();
       updateSvgCode({ force: true });
@@ -767,7 +851,139 @@
       downloadBtn.disabled = !enabled;
       showCodePanelBtn.disabled = !enabled;
       pathHandlesToggle.disabled = !enabled;
+      svgWidthInput.disabled = !enabled;
+      svgHeightInput.disabled = !enabled;
+      fitPaddingInput.disabled = !enabled;
+      fitSvgToContentBtn.disabled = !enabled;
       codePanel.classList.toggle("is-visible", enabled && !codePanelHidden);
+    }
+
+    function updateDocumentSizeControls() {
+      if (!svg) {
+        svgWidthInput.value = "";
+        svgHeightInput.value = "";
+        return;
+      }
+
+      const size = svgRootDocumentSize();
+      svgWidthInput.value = fmt(size.width);
+      svgHeightInput.value = fmt(size.height);
+    }
+
+    function svgRootDocumentSize() {
+      const widthAttr = parseSvgLength(svg.getAttribute("width"));
+      const heightAttr = parseSvgLength(svg.getAttribute("height"));
+      if (widthAttr > 0 && heightAttr > 0) {
+        return { width: widthAttr, height: heightAttr };
+      }
+      return intrinsicSvgSize(svg);
+    }
+
+    function numericNonNegativeInputValue(input) {
+      const raw = String(input.value || "").trim();
+      if (!raw) return 0;
+      if (!/^[-+]?(?:\d*\.\d+|\d+)$/.test(raw)) return null;
+      const value = Number.parseFloat(raw);
+      return Number.isFinite(value) && value >= 0 ? value : null;
+    }
+
+    function contentBoundsInSvg() {
+      if (!svg) return null;
+      const points = [];
+
+      svg.querySelectorAll("*").forEach(el => {
+        if (!isSelectableElement(el)) return;
+        try {
+          const box = el.getBBox();
+          const matrix = elementMatrixInSvgSpace(el);
+          if (!matrix || box.width === 0 && box.height === 0) return;
+          [
+            [box.x, box.y],
+            [box.x + box.width, box.y],
+            [box.x + box.width, box.y + box.height],
+            [box.x, box.y + box.height]
+          ].forEach(([x, y]) => {
+            const point = svg.createSVGPoint();
+            point.x = x;
+            point.y = y;
+            points.push(point.matrixTransform(matrix));
+          });
+        } catch (error) {
+          // Ignore elements without usable bounds.
+        }
+      });
+
+      if (points.length === 0) return null;
+
+      const xs = points.map(point => point.x);
+      const ys = points.map(point => point.y);
+      return {
+        x: Math.min(...xs),
+        y: Math.min(...ys),
+        width: Math.max(...xs) - Math.min(...xs),
+        height: Math.max(...ys) - Math.min(...ys)
+      };
+    }
+
+    function elementMatrixInSvgSpace(el) {
+      try {
+        const svgScreen = svg.getScreenCTM();
+        const elementScreen = el.getScreenCTM();
+        if (svgScreen && elementScreen) {
+          return svgScreen.inverse().multiply(elementScreen);
+        }
+      } catch (error) {
+        // Fall back below.
+      }
+
+      try {
+        return el.getCTM();
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function applyFitSvgToContent(padding) {
+      if (!svg) return false;
+      const bounds = contentBoundsInSvg();
+      if (!bounds) return false;
+
+      const safePadding = Number.isFinite(padding) ? padding : 0;
+      const nextX = bounds.x - safePadding;
+      const nextY = bounds.y - safePadding;
+      const nextWidth = Math.max(1, bounds.width + safePadding * 2);
+      const nextHeight = Math.max(1, bounds.height + safePadding * 2);
+      const beforeViewBox = svg.getAttribute("viewBox") || "";
+      const beforeWidth = svg.getAttribute("width") || "";
+      const beforeHeight = svg.getAttribute("height") || "";
+      const afterViewBox = `${fmt(nextX)} ${fmt(nextY)} ${fmt(nextWidth)} ${fmt(nextHeight)}`;
+      const afterWidth = String(Math.round(nextWidth));
+      const afterHeight = String(Math.round(nextHeight));
+      const items = [];
+
+      if (beforeViewBox !== afterViewBox) {
+        svg.setAttribute("viewBox", afterViewBox);
+        items.push({ element: svg, attr: "viewBox", before: beforeViewBox, after: afterViewBox });
+      }
+      if (beforeWidth !== afterWidth) {
+        svg.setAttribute("width", afterWidth);
+        items.push({ element: svg, attr: "width", before: beforeWidth, after: afterWidth });
+      }
+      if (beforeHeight !== afterHeight) {
+        svg.setAttribute("height", afterHeight);
+        items.push({ element: svg, attr: "height", before: beforeHeight, after: afterHeight });
+      }
+
+      if (items.length > 0) {
+        undoStack.push({ items });
+        redoStack.length = 0;
+        updateHistoryButtons();
+      }
+
+      updateDocumentSizeControls();
+      updateSelectionUI();
+      updateSvgCode({ locateSelection: selectedElements.size === 1 });
+      return true;
     }
 
     function hideCodePanel() {
@@ -790,11 +1006,15 @@
     }
 
     toolHelpBtn.addEventListener("click", () => {
-      openHelpModal("SVG Nudger v3.2", toolHelpText);
+      openHelpModal("SVG Nudger v3.3", toolHelpText);
     });
 
     textHelpBtn.addEventListener("click", () => {
       openHelpModal("Text style", textHelpText);
+    });
+
+    svgDocHelpBtn.addEventListener("click", () => {
+      openHelpModal("SVG Document", svgDocumentHelpText);
     });
 
     textCloseBtn.addEventListener("click", () => {
@@ -814,6 +1034,21 @@
       pathHandlesVisible = !pathHandlesVisible;
       updatePathHandlesToggle();
       updateSelectionUI();
+    });
+
+    fitSvgToContentBtn.addEventListener("click", () => {
+      const padding = numericNonNegativeInputValue(fitPaddingInput);
+      if (padding === null) {
+        setStatus("Enter a valid non-negative padding value.");
+        return;
+      }
+
+      if (!applyFitSvgToContent(padding)) {
+        setStatus("Could not fit the SVG because no visible content bounds were found.");
+        return;
+      }
+
+      setStatus(`Fitted SVG to content with ${fmt(padding)} padding.`);
     });
 
     helpCloseBtn.addEventListener("click", closeHelpModal);
@@ -1551,7 +1786,7 @@
 
       const segments = parsePathData(element.getAttribute("d") || "");
       if (!segments) return null;
-      return segments.some(segment => ["C", "Q", "A"].includes(segment.type)) ? element : null;
+      return segments.some(segment => ["L", "C", "Q", "A"].includes(segment.type)) ? element : null;
     }
 
     function updateOverlay() {
@@ -1618,6 +1853,8 @@
 
       segments.forEach((segment, index) => {
         if (segment.type === "M") {
+          const start = screenPointFromLocal(ctm, segment.x, segment.y);
+          appendOverlayPointHandle(index, "x", "y", start, "#d7f0ff", "#0288d1");
           currentX = segment.x;
           currentY = segment.y;
           return;

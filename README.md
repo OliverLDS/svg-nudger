@@ -1,4 +1,4 @@
-# SVG Nudger v3.2
+# SVG Nudger v3.3
 
 A very small browser-only SVG editing helper for human alignment work.
 
@@ -24,8 +24,9 @@ Codex generates SVG -> open in SVG Nudger -> manually align/resize -> copy or do
 - Edit the SVG source directly in **Current SVG code** and apply it with blur or `Ctrl`/`Cmd` + `Enter`
 - Modify selected SVG text object font family and font size
 - Default nested `<tspan>` clicks to the parent `<text>` object, with `Option`/`Alt` + click for exact `<tspan>` selection
-- Single-select editable curved `<path>` elements to reveal draggable end points, curve controls, arc handles, and an arc-center move handle
+- Single-select editable `<path>` elements to reveal draggable end points, curve controls, arc handles, and an arc-center move handle
 - Toggle path editing handles on or off from the Selection panel
+- Fit the SVG document tightly to visible content with optional padding
 - Copy edited SVG code
 - Download edited SVG
 
@@ -41,8 +42,9 @@ Codex generates SVG -> open in SVG Nudger -> manually align/resize -> copy or do
 8. Edit the SVG source directly in **Current SVG code**, then blur the field or press `Ctrl`/`Cmd` + `Enter` to apply it.
 9. If you select a `<text>` or `<tspan>` element, edit its font family or font size from **Text style**.
 10. For multi-line SVG text built with `<tspan>`, click normally to work on the parent `<text>` object, or use `Option`/`Alt` + click to target one exact line.
-11. If you select one curved `<path>`, drag its visible path handles to edit end points, curve controls, or arc geometry. Use the Selection toggle to hide/show these handles.
-12. Click **Copy SVG Code** or **Download Edited SVG**.
+11. If you select one `<path>`, drag its visible path handles to edit end points, curve controls, or arc geometry. Use the Selection toggle to hide/show these handles.
+12. Use **Fit SVG To Content** with optional padding when you want to compact the real SVG document around the artwork.
+13. Click **Copy SVG Code** or **Download Edited SVG**.
 
 ## Notes
 
@@ -50,5 +52,6 @@ Codex generates SVG -> open in SVG Nudger -> manually align/resize -> copy or do
 - It edits placement and size mainly through `transform="matrix(...)"`.
 - Text style changes are written as `font-family` and `font-size` attributes.
 - The SVG code box is editable and replaces the current SVG when applied.
+- **Fit SVG To Content** rewrites the root `viewBox`, `width`, and `height`.
 - The red selection box and handles are temporary UI only. They are removed from copied/downloaded SVG output.
 - For best results, select the visible object or group that you want to align, not hidden elements inside `defs`.
