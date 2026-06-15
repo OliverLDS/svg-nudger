@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SVG Nudger v3.1</title>
+  <title>SVG Nudger v3.2</title>
   <style>
     :root {
       --sidebar-width: 320px;
@@ -182,6 +182,100 @@
 
     .text-controls.is-visible {
       display: block;
+    }
+
+    .path-legend {
+      display: none;
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      width: 220px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+      z-index: 19;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .path-legend.is-visible {
+      display: block;
+    }
+
+    .path-legend strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #333;
+    }
+
+    .legend-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 5px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #555;
+    }
+
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border: 2px solid currentColor;
+      background: #fff;
+      flex: 0 0 auto;
+    }
+
+    .legend-swatch.is-endpoint {
+      color: #0288d1;
+      border-radius: 2px;
+      background: #d7f0ff;
+    }
+
+    .legend-swatch.is-control {
+      color: #fb8c00;
+      border-radius: 999px;
+      background: #fff7e6;
+    }
+
+    .legend-swatch.is-arc-axis {
+      color: #8e24aa;
+      transform: rotate(45deg);
+      background: #f3e5f5;
+    }
+
+    .legend-swatch.is-center {
+      color: #2e7d32;
+      border-radius: 999px;
+      background: #e8f6ed;
+      position: relative;
+    }
+
+    .legend-swatch.is-center::before,
+    .legend-swatch.is-center::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      background: currentColor;
+      transform: translate(-50%, -50%);
+    }
+
+    .legend-swatch.is-center::before {
+      width: 7px;
+      height: 2px;
+    }
+
+    .legend-swatch.is-center::after {
+      width: 2px;
+      height: 7px;
     }
 
     .section-title {
@@ -413,7 +507,7 @@
 <body>
   <aside>
     <div class="section-title">
-      <h1>SVG Nudger v3.1</h1>
+      <h1>SVG Nudger v3.2</h1>
       <button id="toolHelpBtn" class="info-icon" type="button" aria-label="Tool help">i</button>
     </div>
     <p class="hint">A tiny browser-only tool for manually aligning, multi-selecting, moving, and resizing SVG elements.</p>
@@ -436,7 +530,10 @@
       <button id="redoBtn" disabled>Redo</button>
     </div>
 
-    <h2>Selection</h2>
+    <h2 class="section-title">
+      <span>Selection</span>
+      <button id="pathHandlesToggle" class="mode-toggle is-canvas" type="button" aria-pressed="true">Path handles on</button>
+    </h2>
     <div id="selectedInfo" class="info">No element selected.</div>
 
     <h2 class="section-title">
@@ -485,6 +582,16 @@
 
       <button id="applyTextBtn">Apply Text Style</button>
     </div>
+
+    <div id="pathLegend" class="path-legend" aria-hidden="true">
+      <strong>Path Edit Handles</strong>
+      <ul class="legend-list">
+        <li class="legend-item"><span class="legend-swatch is-endpoint"></span><span>Endpoint</span></li>
+        <li class="legend-item"><span class="legend-swatch is-control"></span><span>Curve control</span></li>
+        <li class="legend-item"><span class="legend-swatch is-arc-axis"></span><span>Arc radius / rotation</span></li>
+        <li class="legend-item"><span class="legend-swatch is-center"></span><span>Arc center move</span></li>
+      </ul>
+    </div>
   </main>
 
   <div id="helpModal" class="help-modal" aria-hidden="true">
@@ -504,6 +611,7 @@
     const svgHost = document.getElementById("svgHost");
     const statusEl = document.getElementById("status");
     const selectedInfo = document.getElementById("selectedInfo");
+    const pathHandlesToggle = document.getElementById("pathHandlesToggle");
     const snapSelect = document.getElementById("snapSelect");
     const undoBtn = document.getElementById("undoBtn");
     const redoBtn = document.getElementById("redoBtn");
@@ -523,6 +631,7 @@
     const helpBody = document.getElementById("helpBody");
     const helpCloseBtn = document.getElementById("helpCloseBtn");
     const textControls = document.getElementById("textControls");
+    const pathLegend = document.getElementById("pathLegend");
     const fontFamilyInput = document.getElementById("fontFamilyInput");
     const fontSizeInput = document.getElementById("fontSizeInput");
     const applyTextBtn = document.getElementById("applyTextBtn");
@@ -537,6 +646,7 @@
     let codeEditorDirty = false;
     let interactionMode = "canvas";
     let lastFocusedBeforeHelp = null;
+    let pathHandlesVisible = true;
     let textPanelDismissed = false;
 
     const undoStack = [];
@@ -547,6 +657,7 @@
       "Shift + click to add/remove objects.",
       "Drag a selected object to move the whole selection.",
       "Drag the box handles to resize.",
+      "Single-select a curved <path> to reveal draggable end points, curve controls, and arc handles.",
       "Hold Shift while resizing from a corner to preserve proportion.",
       "Use arrow keys for fine movement.",
       "Option/Alt-click a <tspan> to select that exact line instead of its parent <text>.",
@@ -646,6 +757,7 @@
       updateSelectionUI();
       updateHistoryButtons();
       updateSvgCode({ force: true });
+      updatePathHandlesToggle();
       setInteractionMode(interactionMode === "code" ? "code" : "canvas", { syncFocus: false });
       setStatus("SVG loaded. Click an object to select it.");
     }
@@ -654,6 +766,7 @@
       copyBtn.disabled = !enabled;
       downloadBtn.disabled = !enabled;
       showCodePanelBtn.disabled = !enabled;
+      pathHandlesToggle.disabled = !enabled;
       codePanel.classList.toggle("is-visible", enabled && !codePanelHidden);
     }
 
@@ -677,7 +790,7 @@
     }
 
     toolHelpBtn.addEventListener("click", () => {
-      openHelpModal("SVG Nudger v3.1", toolHelpText);
+      openHelpModal("SVG Nudger v3.2", toolHelpText);
     });
 
     textHelpBtn.addEventListener("click", () => {
@@ -697,6 +810,12 @@
       hideCodePanel();
     });
 
+    pathHandlesToggle.addEventListener("click", () => {
+      pathHandlesVisible = !pathHandlesVisible;
+      updatePathHandlesToggle();
+      updateSelectionUI();
+    });
+
     helpCloseBtn.addEventListener("click", closeHelpModal);
 
     helpModal.addEventListener("click", (event) => {
@@ -708,6 +827,19 @@
     function setStatus(message) {
       statusEl.textContent = message;
     }
+
+    function updatePathHandlesToggle() {
+      const isOn = pathHandlesVisible;
+      pathHandlesToggle.textContent = isOn ? "Path handles on" : "Path handles off";
+      pathHandlesToggle.classList.toggle("is-code", !isOn);
+      pathHandlesToggle.classList.toggle("is-canvas", isOn);
+      pathHandlesToggle.setAttribute("aria-pressed", String(isOn));
+      pathHandlesToggle.title = isOn
+        ? "Path handles are visible. Click to hide them."
+        : "Path handles are hidden. Click to show them.";
+    }
+
+    updatePathHandlesToggle();
 
     function openHelpModal(title, body) {
       lastFocusedBeforeHelp = document.activeElement;
@@ -877,6 +1009,20 @@
       }
     }
 
+    function commitAttributeHistory(element, attr, before, after) {
+      if (before === after) return;
+      undoStack.push({
+        items: [{
+          element,
+          attr,
+          before,
+          after
+        }]
+      });
+      redoStack.length = 0;
+      updateHistoryButtons();
+    }
+
     function isOverlayElement(el) {
       return Boolean(el && el.closest && el.closest('[data-nudger-overlay="true"]'));
     }
@@ -956,6 +1102,13 @@
 
     function onPointerDown(event) {
       if (!svg) return;
+
+      const pathHandle = event.target.closest && event.target.closest("[data-nudger-path-handle]");
+      if (pathHandle && isOverlayElement(pathHandle)) {
+        startPathHandleDrag(event, pathHandle);
+        event.preventDefault();
+        return;
+      }
 
       const handle = event.target.closest && event.target.closest("[data-nudger-handle]");
       if (handle && isOverlayElement(handle) && selectedElements.size > 0) {
@@ -1071,6 +1224,19 @@
       return point.matrixTransform(matrix);
     }
 
+    function localPointInElement(element, pointInSvg) {
+      try {
+        const matrix = element.getCTM();
+        if (!matrix) return null;
+        const point = svg.createSVGPoint();
+        point.x = pointInSvg.x;
+        point.y = pointInSvg.y;
+        return point.matrixTransform(matrix.inverse());
+      } catch (error) {
+        return null;
+      }
+    }
+
     function distanceToRect(x, y, rect) {
       const dx = x < rect.x ? rect.x - x : x > rect.x + rect.width ? x - (rect.x + rect.width) : 0;
       const dy = y < rect.y ? rect.y - y : y > rect.y + rect.height ? y - (rect.y + rect.height) : 0;
@@ -1103,6 +1269,28 @@
       setStatus("Drag resize handle. Hold Shift on a corner to preserve proportion.");
     }
 
+    function startPathHandleDrag(event, handleEl) {
+      const pathEl = selectedSingleEditablePath();
+      if (!pathEl) return;
+
+      const segments = parsePathData(pathEl.getAttribute("d") || "");
+      if (!segments) return;
+
+      activeAction = {
+        mode: "path-handle",
+        pointerId: event.pointerId,
+        element: pathEl,
+        beforeD: pathEl.getAttribute("d") || "",
+        pathSegments: segments,
+        segmentIndex: Number(handleEl.getAttribute("data-segment-index")),
+        handleKind: handleEl.getAttribute("data-handle-kind") || "point",
+        pointKeyX: handleEl.getAttribute("data-point-key-x"),
+        pointKeyY: handleEl.getAttribute("data-point-key-y")
+      };
+      event.target.setPointerCapture(event.pointerId);
+      setStatus(activeAction.handleKind === "arc-center" ? "Drag arc center to shift the arc span." : "Drag path point handle.");
+    }
+
     function onPointerMove(event) {
       if (!activeAction || event.pointerId !== activeAction.pointerId) return;
 
@@ -1110,6 +1298,8 @@
         moveDuringPointer(event);
       } else if (activeAction.mode === "resize") {
         resizeDuringPointer(event);
+      } else if (activeAction.mode === "path-handle") {
+        pathHandleDuringPointer(event);
       }
 
       updateSelectionUI();
@@ -1173,9 +1363,35 @@
       activeAction.startEntries.forEach(entry => applyRootMatrixFromStart(entry, matrix));
     }
 
+    function pathHandleDuringPointer(event) {
+      const current = svgPoint(event);
+      const local = localPointInElement(activeAction.element, current);
+      if (!local) return;
+
+      const segment = activeAction.pathSegments[activeAction.segmentIndex];
+      if (!segment) return;
+
+      if (activeAction.handleKind === "point") {
+        segment[activeAction.pointKeyX] = snapValue(local.x);
+        segment[activeAction.pointKeyY] = snapValue(local.y);
+      } else if (activeAction.handleKind === "arc-rx" || activeAction.handleKind === "arc-ry") {
+        const startPoint = segmentStartPoint(activeAction.pathSegments, activeAction.segmentIndex);
+        if (!startPoint) return;
+        updateArcAxisHandle(segment, startPoint, local, activeAction.handleKind);
+      } else if (activeAction.handleKind === "arc-center") {
+        updateArcCenterHandle(activeAction.pathSegments, activeAction.segmentIndex, local);
+      }
+
+      activeAction.element.setAttribute("d", serializePathData(activeAction.pathSegments));
+    }
+
     function onPointerUp(event) {
       if (!activeAction || event.pointerId !== activeAction.pointerId) return;
-      commitHistory(activeAction.startEntries);
+      if (activeAction.mode === "path-handle") {
+        commitAttributeHistory(activeAction.element, "d", activeAction.beforeD, activeAction.element.getAttribute("d") || "");
+      } else {
+        commitHistory(activeAction.startEntries);
+      }
       activeAction = null;
       updateSelectionUI();
       updateSvgCode({ locateSelection: selectedElements.size === 1 });
@@ -1328,6 +1544,16 @@
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
+    function selectedSingleEditablePath() {
+      if (selectedElements.size !== 1) return null;
+      const element = Array.from(selectedElements)[0];
+      if (!element || (element.tagName || "").toLowerCase() !== "path") return null;
+
+      const segments = parsePathData(element.getAttribute("d") || "");
+      if (!segments) return null;
+      return segments.some(segment => ["C", "Q", "A"].includes(segment.type)) ? element : null;
+    }
+
     function updateOverlay() {
       if (!overlay) return;
       overlay.innerHTML = "";
@@ -1375,6 +1601,296 @@
         handle.style.cursor = cursorForHandle(name);
         overlay.appendChild(handle);
       });
+
+      const editablePath = pathHandlesVisible ? selectedSingleEditablePath() : null;
+      if (editablePath) {
+        appendPathCurveOverlay(editablePath);
+      }
+    }
+
+    function appendPathCurveOverlay(pathEl) {
+      const segments = parsePathData(pathEl.getAttribute("d") || "");
+      const ctm = pathEl.getCTM();
+      if (!segments || !ctm) return;
+
+      let currentX = 0;
+      let currentY = 0;
+
+      segments.forEach((segment, index) => {
+        if (segment.type === "M") {
+          currentX = segment.x;
+          currentY = segment.y;
+          return;
+        }
+
+        if (segment.type === "C") {
+          const start = screenPointFromLocal(ctm, currentX, currentY);
+          const control1 = screenPointFromLocal(ctm, segment.x1, segment.y1);
+          const control2 = screenPointFromLocal(ctm, segment.x2, segment.y2);
+          const end = screenPointFromLocal(ctm, segment.x, segment.y);
+
+          appendOverlayGuideLine(start, control1);
+          appendOverlayGuideLine(end, control2);
+          appendOverlayPointHandle(index, "x1", "y1", control1, "#ffffff", "#fb8c00");
+          appendOverlayPointHandle(index, "x2", "y2", control2, "#ffffff", "#fb8c00");
+          appendOverlayPointHandle(index, "x", "y", end, "#d7f0ff", "#0288d1");
+
+          currentX = segment.x;
+          currentY = segment.y;
+          return;
+        }
+
+        if (segment.type === "Q") {
+          const start = screenPointFromLocal(ctm, currentX, currentY);
+          const control = screenPointFromLocal(ctm, segment.x1, segment.y1);
+          const end = screenPointFromLocal(ctm, segment.x, segment.y);
+
+          appendOverlayGuideLine(start, control);
+          appendOverlayGuideLine(control, end);
+          appendOverlayPointHandle(index, "x1", "y1", control, "#fff7e6", "#fb8c00");
+          appendOverlayPointHandle(index, "x", "y", end, "#d7f0ff", "#0288d1");
+
+          currentX = segment.x;
+          currentY = segment.y;
+          return;
+        }
+
+        if (segment.type === "A") {
+          const end = screenPointFromLocal(ctm, segment.x, segment.y);
+          const geometry = arcGeometryFromSegment(currentX, currentY, segment);
+          appendOverlayPointHandle(index, "x", "y", end, "#d7f0ff", "#0288d1");
+
+          if (geometry) {
+            const center = screenPointFromLocal(ctm, geometry.cx, geometry.cy);
+            const rxOffset = rotateOffset(geometry.rx, 0, geometry.rotation);
+            const ryOffset = rotateOffset(0, geometry.ry, geometry.rotation);
+            const rxHandle = screenPointFromLocal(ctm, geometry.cx + rxOffset.x, geometry.cy + rxOffset.y);
+            const ryHandle = screenPointFromLocal(ctm, geometry.cx + ryOffset.x, geometry.cy + ryOffset.y);
+
+            appendOverlayGuideLine(center, rxHandle);
+            appendOverlayGuideLine(center, ryHandle);
+            appendOverlayPointHandle(index, null, null, rxHandle, "#f3e5f5", "#8e24aa", "arc-rx", { shape: "diamond" });
+            appendOverlayPointHandle(index, null, null, ryHandle, "#fce4ec", "#d81b60", "arc-ry", { shape: "diamond" });
+            appendOverlayPointHandle(index, null, null, center, "#e8f6ed", "#2e7d32", "arc-center", { shape: "cross-circle", radius: 6 });
+          }
+
+          currentX = segment.x;
+          currentY = segment.y;
+          return;
+        }
+
+        if (segment.type === "L") {
+          const end = screenPointFromLocal(ctm, segment.x, segment.y);
+          appendOverlayPointHandle(index, "x", "y", end, "#d7f0ff", "#0288d1");
+          currentX = segment.x;
+          currentY = segment.y;
+        }
+      });
+    }
+
+    function appendOverlayGuideLine(a, b) {
+      const line = document.createElementNS(NS, "line");
+      line.setAttribute("x1", a.x);
+      line.setAttribute("y1", a.y);
+      line.setAttribute("x2", b.x);
+      line.setAttribute("y2", b.y);
+      line.setAttribute("stroke", "#fb8c00");
+      line.setAttribute("stroke-width", "1.25");
+      line.setAttribute("stroke-dasharray", "3 3");
+      line.setAttribute("vector-effect", "non-scaling-stroke");
+      line.setAttribute("pointer-events", "none");
+      overlay.appendChild(line);
+    }
+
+    function appendOverlayPointHandle(segmentIndex, keyX, keyY, point, fill, stroke, kind = "point", options = {}) {
+      const radius = options.radius || 5;
+      const shape = options.shape || "circle";
+      const group = document.createElementNS(NS, "g");
+      group.setAttribute("data-nudger-path-handle", "true");
+      group.setAttribute("data-segment-index", String(segmentIndex));
+      group.setAttribute("data-handle-kind", kind);
+      if (keyX) group.setAttribute("data-point-key-x", keyX);
+      if (keyY) group.setAttribute("data-point-key-y", keyY);
+      group.setAttribute("pointer-events", "all");
+      group.style.cursor = kind === "point" ? "grab" : kind === "arc-center" ? "move" : "grab";
+
+      const target = document.createElementNS(NS, shape === "diamond" ? "rect" : "circle");
+      if (shape === "diamond") {
+        target.setAttribute("x", point.x - radius);
+        target.setAttribute("y", point.y - radius);
+        target.setAttribute("width", radius * 2);
+        target.setAttribute("height", radius * 2);
+        target.setAttribute("transform", `rotate(45 ${point.x} ${point.y})`);
+      } else {
+        target.setAttribute("cx", point.x);
+        target.setAttribute("cy", point.y);
+        target.setAttribute("r", radius);
+      }
+      target.setAttribute("fill", fill);
+      target.setAttribute("stroke", stroke);
+      target.setAttribute("stroke-width", "1.8");
+      target.setAttribute("vector-effect", "non-scaling-stroke");
+      group.appendChild(target);
+
+      if (shape === "cross-circle") {
+        const h = document.createElementNS(NS, "line");
+        h.setAttribute("x1", point.x - 3);
+        h.setAttribute("y1", point.y);
+        h.setAttribute("x2", point.x + 3);
+        h.setAttribute("y2", point.y);
+        h.setAttribute("stroke", stroke);
+        h.setAttribute("stroke-width", "1.8");
+        h.setAttribute("vector-effect", "non-scaling-stroke");
+        h.setAttribute("pointer-events", "none");
+        group.appendChild(h);
+
+        const v = document.createElementNS(NS, "line");
+        v.setAttribute("x1", point.x);
+        v.setAttribute("y1", point.y - 3);
+        v.setAttribute("x2", point.x);
+        v.setAttribute("y2", point.y + 3);
+        v.setAttribute("stroke", stroke);
+        v.setAttribute("stroke-width", "1.8");
+        v.setAttribute("vector-effect", "non-scaling-stroke");
+        v.setAttribute("pointer-events", "none");
+        group.appendChild(v);
+      }
+
+      overlay.appendChild(group);
+    }
+
+    function rotateOffset(x, y, rotationDegrees) {
+      const radians = rotationDegrees * Math.PI / 180;
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      return {
+        x: x * cos - y * sin,
+        y: x * sin + y * cos
+      };
+    }
+
+    function segmentStartPoint(segments, segmentIndex) {
+      let currentX = 0;
+      let currentY = 0;
+      let startX = 0;
+      let startY = 0;
+
+      for (let i = 0; i < segments.length; i += 1) {
+        const segment = segments[i];
+        if (i === segmentIndex) {
+          return { x: currentX, y: currentY };
+        }
+
+        if (segment.type === "M") {
+          currentX = segment.x;
+          currentY = segment.y;
+          startX = currentX;
+          startY = currentY;
+        } else if (segment.type === "Z") {
+          currentX = startX;
+          currentY = startY;
+        } else {
+          currentX = segment.x;
+          currentY = segment.y;
+        }
+      }
+
+      return null;
+    }
+
+    function arcGeometryFromSegment(startX, startY, segment) {
+      let rx = Math.abs(segment.rx || 0);
+      let ry = Math.abs(segment.ry || 0);
+      if (rx === 0 || ry === 0) return null;
+
+      const rotation = segment.rotation || 0;
+      const phi = rotation * Math.PI / 180;
+      const cosPhi = Math.cos(phi);
+      const sinPhi = Math.sin(phi);
+      const dx2 = (startX - segment.x) / 2;
+      const dy2 = (startY - segment.y) / 2;
+      const x1p = cosPhi * dx2 + sinPhi * dy2;
+      const y1p = -sinPhi * dx2 + cosPhi * dy2;
+
+      let lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+      if (lambda > 1) {
+        const scale = Math.sqrt(lambda);
+        rx *= scale;
+        ry *= scale;
+      }
+
+      const rxSq = rx * rx;
+      const rySq = ry * ry;
+      const x1pSq = x1p * x1p;
+      const y1pSq = y1p * y1p;
+      const numerator = rxSq * rySq - rxSq * y1pSq - rySq * x1pSq;
+      const denominator = rxSq * y1pSq + rySq * x1pSq;
+      if (denominator === 0) return null;
+
+      const sign = segment.largeArc === segment.sweep ? -1 : 1;
+      const factor = sign * Math.sqrt(Math.max(0, numerator / denominator));
+      const cxp = factor * ((rx * y1p) / ry);
+      const cyp = factor * ((-ry * x1p) / rx);
+
+      return {
+        cx: cosPhi * cxp - sinPhi * cyp + (startX + segment.x) / 2,
+        cy: sinPhi * cxp + cosPhi * cyp + (startY + segment.y) / 2,
+        rx,
+        ry,
+        rotation
+      };
+    }
+
+    function updateArcAxisHandle(segment, startPoint, localPoint, handleKind) {
+      const geometry = arcGeometryFromSegment(startPoint.x, startPoint.y, segment);
+      if (!geometry) return;
+
+      const dx = localPoint.x - geometry.cx;
+      const dy = localPoint.y - geometry.cy;
+      const distance = Math.max(0.001, Math.hypot(dx, dy));
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+      if (handleKind === "arc-rx") {
+        segment.rx = snapValue(distance);
+        segment.rotation = angle;
+      } else if (handleKind === "arc-ry") {
+        segment.ry = snapValue(distance);
+        segment.rotation = angle - 90;
+      }
+    }
+
+    function endpointCarrierAt(segments, segmentIndex) {
+      for (let i = segmentIndex; i >= 0; i -= 1) {
+        const segment = segments[i];
+        if (segment && typeof segment.x === "number" && typeof segment.y === "number") {
+          return { segment, index: i };
+        }
+      }
+      return null;
+    }
+
+    function updateArcCenterHandle(segments, segmentIndex, localPoint) {
+      const segment = segments[segmentIndex];
+      if (!segment || segment.type !== "A") return;
+
+      const startPoint = segmentStartPoint(segments, segmentIndex);
+      if (!startPoint) return;
+
+      const geometry = arcGeometryFromSegment(startPoint.x, startPoint.y, segment);
+      if (!geometry) return;
+
+      const dx = snapDelta(localPoint.x - geometry.cx);
+      const dy = snapDelta(localPoint.y - geometry.cy);
+      if (dx === 0 && dy === 0) return;
+
+      const previousCarrier = endpointCarrierAt(segments, segmentIndex - 1);
+      if (previousCarrier) {
+        previousCarrier.segment.x = snapValue(previousCarrier.segment.x + dx);
+        previousCarrier.segment.y = snapValue(previousCarrier.segment.y + dy);
+      }
+
+      segment.x = snapValue(segment.x + dx);
+      segment.y = snapValue(segment.y + dy);
     }
 
     function cursorForHandle(name) {
@@ -1393,8 +1909,16 @@
 
     function updateSelectionUI() {
       updateOverlay();
+      updatePathLegend();
       updateSelectedInfo();
       updateTextControls();
+    }
+
+    function updatePathLegend() {
+      if (!pathLegend) return;
+      const isVisible = Boolean(pathHandlesVisible && selectedSingleEditablePath());
+      pathLegend.classList.toggle("is-visible", isVisible);
+      pathLegend.setAttribute("aria-hidden", String(!isVisible));
     }
 
     function updateSelectedInfo() {
@@ -1485,6 +2009,262 @@
 
     function prettySvg(source) {
       return source.replace(/></g, ">\n<");
+    }
+
+    function parsePathData(source) {
+      const input = String(source || "").trim();
+      if (!input) return null;
+
+      const tokens = input.match(/[AaCcHhLlMmQqSsTtVvZz]|[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?/g);
+      if (!tokens) return null;
+
+      const segments = [];
+      let index = 0;
+      let command = null;
+      let currentX = 0;
+      let currentY = 0;
+      let subpathStartX = 0;
+      let subpathStartY = 0;
+      let previousSegment = null;
+
+      const isCommand = token => /^[A-Za-z]$/.test(token);
+      const nextNumber = () => {
+        if (index >= tokens.length || isCommand(tokens[index])) return null;
+        return Number.parseFloat(tokens[index++]);
+      };
+      const hasNumbers = () => index < tokens.length && !isCommand(tokens[index]);
+
+      while (index < tokens.length) {
+        if (isCommand(tokens[index])) {
+          command = tokens[index++];
+        } else if (!command) {
+          return null;
+        }
+
+        const lower = command.toLowerCase();
+        const relative = command !== command.toUpperCase();
+
+        if (lower === "m") {
+          const x = nextNumber();
+          const y = nextNumber();
+          if (x === null || y === null) return null;
+
+          currentX = relative ? currentX + x : x;
+          currentY = relative ? currentY + y : y;
+          subpathStartX = currentX;
+          subpathStartY = currentY;
+          segments.push({ type: "M", x: currentX, y: currentY });
+          previousSegment = segments[segments.length - 1];
+
+          while (hasNumbers()) {
+            const lineX = nextNumber();
+            const lineY = nextNumber();
+            if (lineX === null || lineY === null) return null;
+            currentX = relative ? currentX + lineX : lineX;
+            currentY = relative ? currentY + lineY : lineY;
+            segments.push({ type: "L", x: currentX, y: currentY });
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "z") {
+          segments.push({ type: "Z" });
+          currentX = subpathStartX;
+          currentY = subpathStartY;
+          previousSegment = segments[segments.length - 1];
+          continue;
+        }
+
+        if (lower === "l") {
+          while (hasNumbers()) {
+            const x = nextNumber();
+            const y = nextNumber();
+            if (x === null || y === null) return null;
+            currentX = relative ? currentX + x : x;
+            currentY = relative ? currentY + y : y;
+            segments.push({ type: "L", x: currentX, y: currentY });
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "h") {
+          while (hasNumbers()) {
+            const x = nextNumber();
+            if (x === null) return null;
+            currentX = relative ? currentX + x : x;
+            segments.push({ type: "L", x: currentX, y: currentY });
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "v") {
+          while (hasNumbers()) {
+            const y = nextNumber();
+            if (y === null) return null;
+            currentY = relative ? currentY + y : y;
+            segments.push({ type: "L", x: currentX, y: currentY });
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "c") {
+          while (hasNumbers()) {
+            const x1 = nextNumber();
+            const y1 = nextNumber();
+            const x2 = nextNumber();
+            const y2 = nextNumber();
+            const x = nextNumber();
+            const y = nextNumber();
+            if ([x1, y1, x2, y2, x, y].some(value => value === null)) return null;
+            segments.push({
+              type: "C",
+              x1: relative ? currentX + x1 : x1,
+              y1: relative ? currentY + y1 : y1,
+              x2: relative ? currentX + x2 : x2,
+              y2: relative ? currentY + y2 : y2,
+              x: relative ? currentX + x : x,
+              y: relative ? currentY + y : y
+            });
+            currentX = segments[segments.length - 1].x;
+            currentY = segments[segments.length - 1].y;
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "s") {
+          while (hasNumbers()) {
+            const x2 = nextNumber();
+            const y2 = nextNumber();
+            const x = nextNumber();
+            const y = nextNumber();
+            if ([x2, y2, x, y].some(value => value === null)) return null;
+
+            const reflected = previousSegment && previousSegment.type === "C"
+              ? { x: currentX * 2 - previousSegment.x2, y: currentY * 2 - previousSegment.y2 }
+              : { x: currentX, y: currentY };
+
+            segments.push({
+              type: "C",
+              x1: reflected.x,
+              y1: reflected.y,
+              x2: relative ? currentX + x2 : x2,
+              y2: relative ? currentY + y2 : y2,
+              x: relative ? currentX + x : x,
+              y: relative ? currentY + y : y
+            });
+            currentX = segments[segments.length - 1].x;
+            currentY = segments[segments.length - 1].y;
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "q") {
+          while (hasNumbers()) {
+            const x1 = nextNumber();
+            const y1 = nextNumber();
+            const x = nextNumber();
+            const y = nextNumber();
+            if ([x1, y1, x, y].some(value => value === null)) return null;
+            segments.push({
+              type: "Q",
+              x1: relative ? currentX + x1 : x1,
+              y1: relative ? currentY + y1 : y1,
+              x: relative ? currentX + x : x,
+              y: relative ? currentY + y : y
+            });
+            currentX = segments[segments.length - 1].x;
+            currentY = segments[segments.length - 1].y;
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "t") {
+          while (hasNumbers()) {
+            const x = nextNumber();
+            const y = nextNumber();
+            if ([x, y].some(value => value === null)) return null;
+
+            const reflected = previousSegment && previousSegment.type === "Q"
+              ? { x: currentX * 2 - previousSegment.x1, y: currentY * 2 - previousSegment.y1 }
+              : { x: currentX, y: currentY };
+
+            segments.push({
+              type: "Q",
+              x1: reflected.x,
+              y1: reflected.y,
+              x: relative ? currentX + x : x,
+              y: relative ? currentY + y : y
+            });
+            currentX = segments[segments.length - 1].x;
+            currentY = segments[segments.length - 1].y;
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        if (lower === "a") {
+          while (hasNumbers()) {
+            const rx = nextNumber();
+            const ry = nextNumber();
+            const rotation = nextNumber();
+            const largeArc = nextNumber();
+            const sweep = nextNumber();
+            const x = nextNumber();
+            const y = nextNumber();
+            if ([rx, ry, rotation, largeArc, sweep, x, y].some(value => value === null)) return null;
+
+            segments.push({
+              type: "A",
+              rx: Math.abs(rx),
+              ry: Math.abs(ry),
+              rotation,
+              largeArc: largeArc ? 1 : 0,
+              sweep: sweep ? 1 : 0,
+              x: relative ? currentX + x : x,
+              y: relative ? currentY + y : y
+            });
+            currentX = segments[segments.length - 1].x;
+            currentY = segments[segments.length - 1].y;
+            previousSegment = segments[segments.length - 1];
+          }
+          continue;
+        }
+
+        return null;
+      }
+
+      return segments;
+    }
+
+    function formatPathNumber(value) {
+      const rounded = Math.round(value * 1000) / 1000;
+      if (Object.is(rounded, -0)) return "0";
+      return String(rounded);
+    }
+
+    function serializePathData(segments) {
+      return segments.map(segment => {
+        if (segment.type === "M" || segment.type === "L") {
+          return `${segment.type} ${formatPathNumber(segment.x)} ${formatPathNumber(segment.y)}`;
+        }
+        if (segment.type === "C") {
+          return `C ${formatPathNumber(segment.x1)} ${formatPathNumber(segment.y1)} ${formatPathNumber(segment.x2)} ${formatPathNumber(segment.y2)} ${formatPathNumber(segment.x)} ${formatPathNumber(segment.y)}`;
+        }
+        if (segment.type === "Q") {
+          return `Q ${formatPathNumber(segment.x1)} ${formatPathNumber(segment.y1)} ${formatPathNumber(segment.x)} ${formatPathNumber(segment.y)}`;
+        }
+        if (segment.type === "A") {
+          return `A ${formatPathNumber(segment.rx)} ${formatPathNumber(segment.ry)} ${formatPathNumber(segment.rotation || 0)} ${segment.largeArc ? 1 : 0} ${segment.sweep ? 1 : 0} ${formatPathNumber(segment.x)} ${formatPathNumber(segment.y)}`;
+        }
+        return "Z";
+      }).join(" ");
     }
 
     function pathToElement(element) {

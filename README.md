@@ -1,4 +1,4 @@
-# SVG Nudger v3.1
+# SVG Nudger v3.2
 
 A very small browser-only SVG editing helper for human alignment work.
 
@@ -24,6 +24,8 @@ Codex generates SVG -> open in SVG Nudger -> manually align/resize -> copy or do
 - Edit the SVG source directly in **Current SVG code** and apply it with blur or `Ctrl`/`Cmd` + `Enter`
 - Modify selected SVG text object font family and font size
 - Default nested `<tspan>` clicks to the parent `<text>` object, with `Option`/`Alt` + click for exact `<tspan>` selection
+- Single-select editable curved `<path>` elements to reveal draggable end points, curve controls, arc handles, and an arc-center move handle
+- Toggle path editing handles on or off from the Selection panel
 - Copy edited SVG code
 - Download edited SVG
 
@@ -39,7 +41,8 @@ Codex generates SVG -> open in SVG Nudger -> manually align/resize -> copy or do
 8. Edit the SVG source directly in **Current SVG code**, then blur the field or press `Ctrl`/`Cmd` + `Enter` to apply it.
 9. If you select a `<text>` or `<tspan>` element, edit its font family or font size from **Text style**.
 10. For multi-line SVG text built with `<tspan>`, click normally to work on the parent `<text>` object, or use `Option`/`Alt` + click to target one exact line.
-11. Click **Copy SVG Code** or **Download Edited SVG**.
+11. If you select one curved `<path>`, drag its visible path handles to edit end points, curve controls, or arc geometry. Use the Selection toggle to hide/show these handles.
+12. Click **Copy SVG Code** or **Download Edited SVG**.
 
 ## Notes
 
